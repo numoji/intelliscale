@@ -1,0 +1,9 @@
+[package]
+name = "numoji/puppetplugin"
+version = "1.0.0"
+registry = "https://github.com/UpliftGames/wally-index"
+realm = "server"
+
+[dependencies]
+React = "core-packages/react@17.0.1-rc.19"
+StudioComponents = "sircfenner/studiocomponents@1.0.0"

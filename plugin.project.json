@@ -1,0 +1,7 @@
+{
+  "name": "PuppetPlugin",
+  "tree": {
+    "$className": "Folder",
+    "$path": "src"
+  }
+}

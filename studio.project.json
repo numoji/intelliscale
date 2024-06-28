@@ -1,0 +1,20 @@
+{
+  "name": "PuppetPlugin",
+  "tree": {
+    "$className": "DataModel",
+    "ServerStorage": {
+      "$className": "ServerStorage",
+      "PuppetPlugin": {
+        "$className": "Folder",
+        "Packages": {
+          "$className": "Folder",
+          "$path": "Packages"
+        },
+        "Source": {
+          "$className": "Folder",
+          "$path": "src"
+        }
+      }
+    }
+  }
+}
