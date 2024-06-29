@@ -20,7 +20,6 @@ widget:GetPropertyChangedSignal("Enabled"):Connect(function()
 		toggleWidgetButton:SetActive(true)
 	else
 		toggleWidgetButton:SetActive(false)
-		widget.Title = ""
 	end
 end)
 
