@@ -2,7 +2,6 @@ local source = script.Parent
 local packages = script.Parent.Parent.Packages
 local React = require(packages.React)
 local ReactRoblox = require(packages.ReactRoblox)
-local pluginContext = require(source.contexts.pluginContext)
 local widgetApp = require(source.widgetApp)
 
 local toolbar = plugin:CreateToolbar("Intelliscale")
@@ -15,36 +14,22 @@ local widget = plugin:CreateDockWidgetPluginGui(
 widget.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 widget.Title = "Intelliscale"
 
-widget:GetPropertyChangedSignal("Enabled"):Connect(function()
+function updateWidgetButton()
 	if widget.Enabled then
 		toggleWidgetButton:SetActive(true)
 	else
 		toggleWidgetButton:SetActive(false)
 	end
-end)
+end
+updateWidgetButton()
+widget:GetPropertyChangedSignal("Enabled"):Connect(updateWidgetButton)
 
 toggleWidgetButton.Click:Connect(function()
 	widget.Enabled = not widget.Enabled
 end)
 
 local root = ReactRoblox.createRoot(widget)
-
-local function rootApp(_props)
-	return React.createElement(pluginContext.Provider, {
-		value = plugin,
-	}, {
-		React.createElement("ScreenGui", {
-			IgnoreGuiInset = true,
-			ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
-		}, {
-			React.createElement(widgetApp),
-		}),
-	})
-end
-
-root:render(React.createElement(rootApp, {
-	plugin = plugin,
-}))
+root:render(React.createElement(widgetApp))
 
 plugin.Unloading:Connect(function()
 	root:unmount()
