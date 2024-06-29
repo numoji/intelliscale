@@ -1,7 +1,14 @@
 {
-  "name": "PuppetPlugin",
+  "name": "Intelliscale",
   "tree": {
     "$className": "Folder",
-    "$path": "src"
+    "Packages": {
+      "$className": "Folder",
+      "$path": "Packages"
+    },
+    "Source": {
+      "$className": "Folder",
+      "$path": "src"
+    }
   }
 }

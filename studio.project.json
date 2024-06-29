@@ -1,10 +1,10 @@
 {
-  "name": "PuppetPlugin",
+  "name": "Intelliscale",
   "tree": {
     "$className": "DataModel",
     "ServerStorage": {
       "$className": "ServerStorage",
-      "PuppetPlugin": {
+      "Intelliscale": {
         "$className": "Folder",
         "Packages": {
           "$className": "Folder",
