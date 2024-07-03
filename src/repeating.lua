@@ -158,6 +158,7 @@ local function deepDifference(a: any, b: any): any
 end
 
 function repeating.initializeRepeating()
+	-- Refactor to only update here when the repeat settings change
 	janitor:Add(selectionHelper.bindToAnyContainedChanged(function(containeds)
 		for _, contained in containeds do
 			if not attributeHelper.wasLastChangedByMe(contained) then
@@ -189,6 +190,7 @@ function repeating.initializeRepeating()
 	end))
 end
 
+-- Handle position & size changes here
 function repeating.updateRepeatsFromSizeOrPositionChanges(changedList)
 	-- Iterate through the changedList and update repeats as necessary. Each
 	-- time we update, we should climb the hierarchy up to the root container,
