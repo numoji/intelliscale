@@ -52,10 +52,13 @@ local function containerButton(_props)
 			Text = "Dissolve Container",
 			OnActivated = function()
 				recordUndoChange(function()
-					for _, child in selectedContainer:GetChildren() do
+					local kiddos = selectedContainer:GetChildren()
+
+					for _, child in kiddos do
 						child.Parent = selectedContainer.Parent
 					end
 
+					Selection:Set(kiddos)
 					selectedContainer.Parent = nil
 				end)
 			end,

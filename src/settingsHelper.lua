@@ -11,7 +11,7 @@ local function isSelectionValid()
 	end
 
 	for _, instance in selection do
-		if not instance:IsA("BasePart") then
+		if not (instance:IsA("BasePart") and instance.Parent:IsA("BasePart") and instance.Parent:GetAttribute("isContainer")) then
 			return false
 		end
 	end

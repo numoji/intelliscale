@@ -6,11 +6,13 @@ local StudioComponents = require(packages.StudioComponents)
 local source = script.Parent
 local containerHelper = require(source.containerHelper)
 local scaling = require(source.scaling)
+local selectionDisplay = require(source.selectionDisplay)
 local settingsHelper = require(source.settingsHelper)
 local widgetApp = require(source.widgetApp)
 
 containerHelper.registerCollisionGroup()
-scaling.initializePluginAction(plugin)
+scaling.initializePluginActions(plugin)
+selectionDisplay.initializeHighlightContainer()
 
 local toolbar = plugin:CreateToolbar("Intelliscale")
 local toggleWidgetButton = toolbar:CreateButton("Intelliscale", "Toggle widget", "")
@@ -39,12 +41,13 @@ toggleWidgetButton.Click:Connect(function()
 end)
 
 local root = ReactRoblox.createRoot(widget)
-root:render(
-	React.createElement(StudioComponents.PluginProvider, { Plugin = plugin }, { React.createElement(widgetApp) })
-)
+root:render(React.createElement(StudioComponents.PluginProvider, { Plugin = plugin }, { React.createElement(widgetApp) }))
 
 plugin.Unloading:Connect(function()
 	root:unmount()
 	settingsHelper.disconnect()
 	containerHelper.unregisterCollisionGroup()
+	selectionDisplay.cleanup()
+	scaling.cleanup()
+	plugin:GetMouse().Icon = ""
 end)

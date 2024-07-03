@@ -149,8 +149,7 @@ function repeatAxisSettings(props)
 			Text = `{string.upper(axis)} Repeat Settings`,
 			Size = UDim2.new(1, 0, 0, 24),
 			Position = UDim2.fromOffset(10, 0),
-			TextColorStyle = repeatState.disabled and Enum.StudioStyleGuideColor.DimmedText
-				or Enum.StudioStyleGuideColor.MainText,
+			TextColorStyle = repeatState.disabled and Enum.StudioStyleGuideColor.DimmedText or Enum.StudioStyleGuideColor.MainText,
 			TextXAlignment = Enum.TextXAlignment.Left,
 			LayoutOrder = 0,
 		}),

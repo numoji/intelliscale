@@ -24,10 +24,10 @@ function getConstraintSettingProps(axis, disabled, constraints, defaultOverrides
 	return {
 		Items = { min, max, `{min} and {max}`, "Center", "Scale" },
 		Size = UDim2.new(1, 0, 0, StudioComponents.Constants.DefaultDropdownHeight),
-		ClearButton = true,
+		-- ClearButton = true,
 		DefaultText = defaultOverrides[axis] or "None",
 		Disabled = disabled,
-		SelectedItem = constraints[axis],
+		SelectedItem = constraints[axis] or (not disabled and "Scale" or nil),
 		OnItemSelected = function(newItem)
 			recordUndoChange(function()
 				for _, instance in Selection:Get() do

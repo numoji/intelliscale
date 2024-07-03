@@ -73,8 +73,7 @@ function labeledSettingsPanel(props)
 			side0,
 			e(settingLabel, {
 				Text = settingComponent.LabelText,
-				TextColorStyle = componentProps.Disabled and Enum.StudioStyleGuideColor.DimmedText
-					or Enum.StudioStyleGuideColor.MainText,
+				TextColorStyle = componentProps.Disabled and Enum.StudioStyleGuideColor.DimmedText or Enum.StudioStyleGuideColor.MainText,
 				Size = componentProps.Size,
 				LayoutOrder = i,
 			})
