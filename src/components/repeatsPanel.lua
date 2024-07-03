@@ -6,6 +6,7 @@ local React = require(packages.React)
 local StudioComponents = require(packages.StudioComponents)
 
 local source = script.Parent.Parent
+local attributeHelper = require(source.utility.attributeHelper)
 local changeHistoryHelper = require(source.utility.changeHistoryHelper)
 local settingsHelper = require(source.utility.settingsHelper)
 local types = require(source.types)
@@ -19,7 +20,7 @@ local function setSelectionAttribute(attribute, value)
 	changeHistoryHelper.recordUndoChange(function()
 		for _, instance in Selection:Get() do
 			if instance:IsA("BasePart") then
-				instance:SetAttribute(attribute, value)
+				attributeHelper.setAttribute(instance, attribute, value)
 			end
 		end
 	end)
@@ -35,7 +36,7 @@ local function getSettingSetter(axis: types.AxisString, settingName: string)
 						newValue = not currentValue
 					end
 
-					instance:SetAttribute(axis .. settingName, newValue)
+					attributeHelper.setAttribute(instance, axis .. settingName, newValue)
 				end
 			end
 		end)

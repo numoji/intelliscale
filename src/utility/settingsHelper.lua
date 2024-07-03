@@ -98,7 +98,7 @@ export type RepeatDefaultOverrides = {
 	repeatAmountNegative: OverrideString?,
 }
 
-local function getRepeatSettings(instance: BasePart, axis: types.AxisString): RepeatSettings
+settingsHelper.getRepeatSettings = function(instance: BasePart | Folder, axis: types.AxisString): RepeatSettings
 	local repeatSettings = {}
 
 	local repeatKind = instance:GetAttribute(axis .. "RepeatKind")
@@ -119,14 +119,14 @@ end
 
 local function updateRepeatSettingForSelection(axis: types.AxisString, selection: { BasePart }): (RepeatSettings, RepeatDefaultOverrides)
 	if #selection == 1 then
-		local repeatSettings = getRepeatSettings(selection[1], axis)
+		local repeatSettings = settingsHelper.getRepeatSettings(selection[1], axis)
 		return repeatSettings, {}
 	else
-		local repeatSettings = getRepeatSettings(selection[1], axis)
+		local repeatSettings = settingsHelper.getRepeatSettings(selection[1], axis)
 		local defaultOverrides = {}
 
 		for i = 2, #selection do
-			local compareSettings = getRepeatSettings(selection[i], axis)
+			local compareSettings = settingsHelper.getRepeatSettings(selection[i], axis)
 
 			for settingName, settingValue in compareSettings do
 				if repeatSettings[settingName] and repeatSettings[settingName] ~= settingValue then

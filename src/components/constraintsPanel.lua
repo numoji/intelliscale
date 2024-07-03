@@ -6,6 +6,7 @@ local React = require(packages.React)
 local StudioComponents = require(packages.StudioComponents)
 
 local source = script.Parent.Parent
+local attributeHelper = require(source.utility.attributeHelper)
 local changeHistoryHelper = require(source.utility.changeHistoryHelper)
 local settingsHelper = require(source.utility.settingsHelper)
 local types = require(source.types)
@@ -41,7 +42,7 @@ function getConstraintSettingProps(
 			changeHistoryHelper.recordUndoChange(function()
 				for _, instance in Selection:Get() do
 					if instance:IsA("BasePart") then
-						instance:SetAttribute(axis .. "Constraint", newItem)
+						attributeHelper.setAttribute(instance, axis .. "Constraint", newItem)
 					end
 				end
 			end)

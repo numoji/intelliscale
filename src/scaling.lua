@@ -4,9 +4,12 @@ local Selection = game:GetService("Selection")
 local packages = script.Parent.Parent.Packages
 local Janitor = require(packages.Janitor)
 
+local epsilon = 1e-5
+
 local source = script.Parent
 local changeHistoryHelper = require(source.utility.changeHistoryHelper)
 local geometryHelper = require(source.utility.geometryHelper)
+local repeating = require(source.repeating)
 local round = require(source.utility.round)
 local types = require(source.types)
 
@@ -98,11 +101,28 @@ local scaleFunctionsMap: ScaleFunctionsMap = {
 	end,
 }
 
-local function scaleChildrenRecursive(axes: { types.AxisString }, newSize: Vector3, newCFrame: CFrame, part: BasePart)
+local function moveChildrenRecursive(deltaPosition: Vector3, part: BasePart)
 	for _, child in part:GetChildren() do
 		if child:IsA("BasePart") then
-			local finalPosition = child.Position
-			local finalSize = child.Size
+			moveChildrenRecursive(deltaPosition, child)
+		end
+	end
+
+	part.Position += deltaPosition
+end
+
+local function scaleChildrenRecursive(
+	axes: { types.AxisString },
+	newSize: Vector3,
+	newCFrame: CFrame,
+	part: BasePart,
+	changedList: { BasePart }
+)
+	for _, child in part:GetChildren() do
+		if child:IsA("BasePart") then
+			table.insert(changedList, 1, child)
+			local totalDeltaPosition = Vector3.zero
+			local totalDeltaSize = Vector3.zero
 			for _, axis: types.AxisString in axes do
 				local constraint = child:GetAttribute(`{axis}Constraint`) or "Scale"
 				local constraintType = geometryHelper.constraintMap[constraint]
@@ -111,10 +131,27 @@ local function scaleChildrenRecursive(axes: { types.AxisString }, newSize: Vecto
 				local axisEnum = geometryHelper.axisEnumByString[axis]
 				local deltaPosition, deltaSize = scaleFunction(axisEnum, newCFrame, newSize, child)
 
-				finalPosition += deltaPosition --geometryHelper.getCFrameAxis(newCFrame, axisEnum) * deltaPosition
-				finalSize += deltaSize --geometryHelper.getCFrameAxis(child.CFrame, axisEnum) * deltaSize
+				totalDeltaPosition += deltaPosition --geometryHelper.getCFrameAxis(newCFrame, axisEnum) * deltaPosition
+				totalDeltaSize += deltaSize --geometryHelper.getCFrameAxis(child.CFrame, axisEnum) * deltaSize
 			end
-			scaleChildrenRecursive(axes, finalSize, CFrame.new(finalPosition), child)
+
+			if totalDeltaPosition.Magnitude < epsilon then
+				totalDeltaPosition = Vector3.zero
+			end
+
+			if totalDeltaPosition == Vector3.zero and totalDeltaSize == Vector3.zero then
+				continue
+			elseif totalDeltaSize == Vector3.zero then
+				moveChildrenRecursive(totalDeltaPosition, child)
+			else
+				scaleChildrenRecursive(
+					axes,
+					child.Size + totalDeltaSize,
+					CFrame.new(child.Position + totalDeltaPosition),
+					child,
+					changedList
+				)
+			end
 		end
 	end
 
@@ -186,9 +223,13 @@ function scaling.initializeHandles(plugin)
 		local newContainerCFrame = scalingPart.CFrame * CFrame.new(axis * deltaSize / 2)
 		local axisName: types.AxisString = geometryHelper.axisNameByNormalIdMap[face]
 
+		local changedList = { scalingPart }
+
 		changeHistoryHelper.recordUndoChange(function()
-			scaleChildrenRecursive({ axisName }, newContainerSize, newContainerCFrame, scalingPart)
+			scaleChildrenRecursive({ axisName }, newContainerSize, newContainerCFrame, scalingPart, changedList)
 		end)
+
+		repeating.updateRepeatsFromSizeOrPositionChanges(changedList)
 
 		currentSize = newSize
 	end)
