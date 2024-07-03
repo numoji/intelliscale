@@ -1,4 +1,5 @@
-local packages = script.Parent.Parent.Packages
+--!strict
+local packages = script.Parent.Parent.Parent.Packages
 local React = require(packages.React)
 local StudioComponents = require(packages.StudioComponents)
 

@@ -1,13 +1,17 @@
+--!strict
 local Selection = game:GetService("Selection")
 
-local packages = script.Parent.Parent.Packages
+local packages = script.Parent.Parent.Parent.Packages
 local React = require(packages.React)
 local StudioComponents = require(packages.StudioComponents)
 
-local source = script.Parent
-local changeHistoryHelper = require(source.changeHistoryHelper)
-local labeledSettingsPanel = require(source.labeledSettingsPanel)
-local settingsHelper = require(source.settingsHelper)
+local source = script.Parent.Parent
+local changeHistoryHelper = require(source.utility.changeHistoryHelper)
+local settingsHelper = require(source.utility.settingsHelper)
+local types = require(source.types)
+
+local components = script.Parent
+local labeledSettingsPanel = require(components.labeledSettingsPanel)
 
 local e = React.createElement
 
@@ -21,7 +25,7 @@ local function setSelectionAttribute(attribute, value)
 	end)
 end
 
-local function getSettingSetter(axis, settingName)
+local function getSettingSetter(axis: types.AxisString, settingName: string)
 	return function(newValue)
 		changeHistoryHelper.recordUndoChange(function()
 			for _, instance in Selection:Get() do
@@ -32,20 +36,25 @@ local function getSettingSetter(axis, settingName)
 					end
 
 					instance:SetAttribute(axis .. settingName, newValue)
-					settingsHelper.updateAllRepeatSettingsForSelection()
 				end
 			end
 		end)
 	end
 end
 
+type RepeatState = {
+	disabled: boolean,
+	repeatSettings: settingsHelper.RepeatSettings,
+	defaultOverrides: settingsHelper.RepeatDefaultOverrides,
+}
+
 function repeatAxisSettings(props)
-	local axis = props.axis
+	local axis = props.axis :: types.AxisString
 	local layoutOrder = props.LayoutOrder
 
-	local repeatState, setRepeatState = React.useState({
+	local repeatState: RepeatState, setRepeatState = React.useState({
 		disabled = true,
-		repeats = {},
+		repeatSettings = {},
 		defaultOverrides = {},
 	})
 
@@ -54,20 +63,18 @@ function repeatAxisSettings(props)
 			function(isSelectionValid, repeats, defaultOverrides)
 				setRepeatState({
 					disabled = not isSelectionValid,
-					repeats = repeats[axis] or {},
+					repeatSettings = repeats[axis] or {},
 					defaultOverrides = defaultOverrides[axis] or {},
 				})
 			end
 		)
-
-		settingsHelper.updateAllRepeatSettingsForSelection()
 
 		return function()
 			repeatSettingsChangedConnection:Disconnect()
 		end
 	end)
 
-	local repeats = repeatState.repeats
+	local repeats = repeatState.repeatSettings
 	local defaultOverrides = repeatState.defaultOverrides
 	local disabled = repeatState.disabled
 
@@ -103,7 +110,7 @@ function repeatAxisSettings(props)
 				ButtonAlignment = Enum.HorizontalAlignment.Right,
 				Value = if repeats.stretchToFit ~= "~" then repeats.stretchToFit or false else nil,
 				Disabled = disabled,
-				OnChanged = getSettingSetter(axis, "StretchToFit"),
+				OnChanged = getSettingSetter(axis :: types.AxisString, "StretchToFit"),
 			},
 		})
 	end
@@ -119,7 +126,7 @@ function repeatAxisSettings(props)
 				Min = 0,
 				Arrows = true,
 				Disabled = disabled,
-				OnValidChanged = getSettingSetter(axis, "RepeatAmountPositive"),
+				OnValidChanged = getSettingSetter(axis :: types.AxisString, "RepeatAmountPositive"),
 			},
 		})
 
@@ -134,7 +141,7 @@ function repeatAxisSettings(props)
 				Max = 0,
 				Arrows = true,
 				Disabled = disabled,
-				OnValidChanged = getSettingSetter(axis, "RepeatAmountNegative"),
+				OnValidChanged = getSettingSetter(axis :: types.AxisString, "RepeatAmountNegative"),
 			},
 		})
 	end

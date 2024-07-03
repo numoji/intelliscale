@@ -1,22 +1,23 @@
+--!nonstrict
+-- Has to be nonstrict cause linehandle.Adornee can't be set to nil
+
 local CoreGui = game:GetService("CoreGui")
-local Selection = game:GetService("Selection")
-local StarterGui = game:GetService("StarterGui")
 local selectionDisplay = {}
 
+local packages = script.Parent.Parent.Packages
+local Janitor = require(packages.Janitor)
+
 local source = script.Parent
-local geometryHelper = require(source.geometryHelper)
+local geometryHelper = require(source.utility.geometryHelper)
+local selectionHelper = require(source.utility.selectionHelper)
+local types = require(source.types)
 
-local selectionChangedConnection
-local selectedChangedConnection
-local selectedAttChangedConnection
-local selectionBox
-local xLineA, xLineB, yLineA, yLineB, zLineA, zLineB
+local janitor = Janitor.new()
 
-local function initLine(color, name)
-	local lineHandle = Instance.new("LineHandleAdornment")
-	lineHandle.Name = name
+local function createLineHandle(color)
+	local lineHandle = janitor:Add(Instance.new("LineHandleAdornment"))
 	lineHandle.AlwaysOnTop = true
-	lineHandle.Parent = StarterGui
+	lineHandle.Parent = CoreGui
 	lineHandle.Thickness = 15
 	lineHandle.Color3 = color
 	lineHandle.Archivable = false
@@ -24,15 +25,26 @@ local function initLine(color, name)
 	return lineHandle
 end
 
-local function drawLine(line, start, finish)
-	local adornee = line.Adornee
+local function createSelectionBox(color)
+	local selectionBox = janitor:Add(Instance.new("SelectionBox"))
+	selectionBox.LineThickness = 0.02
+	selectionBox.SurfaceTransparency = 1
+	selectionBox.Parent = CoreGui
+	selectionBox.Color3 = color
+	selectionBox.Visible = true
+	selectionBox.Archivable = false
+	return selectionBox
+end
+
+local function drawLine(line: LineHandleAdornment, start: Vector3, finish: Vector3)
+	local adornee = line.Adornee :: BasePart
 	line.CFrame = adornee.CFrame:ToObjectSpace(CFrame.lookAt(start, finish))
 	line.Length = (start - finish).Magnitude
 end
 
 local function drawLineBetweenFaces(axis, line)
-	local adornee = line.Adornee
-	local parent = adornee.Parent
+	local adornee = line.Adornee :: BasePart
+	local parent = adornee.Parent :: BasePart
 
 	local adorneeFace = geometryHelper.getFacePosition(adornee, axis)
 	local parentFace = geometryHelper.getFacePosition(parent, axis)
@@ -44,25 +56,25 @@ end
 
 local updateFunctionsMap = {
 	Min = function(axisEnum: Enum.Axis, line: LineHandleAdornment)
-		local parent = line.Adornee.Parent
+		local parent = line.Adornee.Parent :: BasePart
 		local axis = -geometryHelper.getCFrameAxis(parent.CFrame, axisEnum)
 		drawLineBetweenFaces(axis, line)
 	end,
 	Max = function(axisEnum: Enum.Axis, line: LineHandleAdornment)
-		local parent = line.Adornee.Parent
+		local parent = line.Adornee.Parent :: BasePart
 		local axis = geometryHelper.getCFrameAxis(parent.CFrame, axisEnum)
 		drawLineBetweenFaces(axis, line)
 	end,
 	MinMax = function(axisEnum: Enum.Axis, lineA: LineHandleAdornment, lineB: LineHandleAdornment)
-		local parent = lineA.Adornee.Parent
+		local parent = lineA.Adornee.Parent :: BasePart
 		local axis = geometryHelper.getCFrameAxis(parent.CFrame, axisEnum)
 		drawLineBetweenFaces(axis, lineA)
 		axis = -geometryHelper.getCFrameAxis(parent.CFrame, axisEnum)
 		drawLineBetweenFaces(axis, lineB)
 	end,
 	Center = function(axisEnum: Enum.Axis, line: LineHandleAdornment)
-		local adornee = line.Adornee
-		local parent = adornee.Parent
+		local adornee = line.Adornee :: BasePart
+		local parent = adornee.Parent :: BasePart
 		local axis = geometryHelper.getCFrameAxis(parent.CFrame, axisEnum)
 
 		local adorneeToParentVector = (parent.Position - adornee.Position)
@@ -73,8 +85,8 @@ local updateFunctionsMap = {
 		drawLine(line, start, finish)
 	end,
 	Scale = function(axisEnum: Enum.Axis, line: LineHandleAdornment)
-		local adornee = line.Adornee
-		local parent = adornee.Parent
+		local adornee = line.Adornee :: BasePart
+		local parent = adornee.Parent :: BasePart
 		local axis = geometryHelper.getCFrameAxis(parent.CFrame, axisEnum)
 
 		local start = adornee.Position - (axis / 2)
@@ -84,103 +96,63 @@ local updateFunctionsMap = {
 	end,
 }
 
-local function updateLinesByAxis(axis: "x" | "y" | "z", selected: BasePart, lineA: LineHandleAdornment, lineB: LineHandleAdornment)
+local function updateLinesByAxis(axis: types.AxisString, selected: BasePart, lineA: LineHandleAdornment, lineB: LineHandleAdornment)
 	local constraint = selected:GetAttribute(axis .. "Constraint") or "Scale"
 	local constraintType = geometryHelper.constraintMap[constraint]
+
+	local axisEnum = geometryHelper.axisEnumByString[axis]
 
 	if constraintType == "MinMax" then
 		lineA.Adornee = selected
 		lineB.Adornee = selected
-		updateFunctionsMap[constraintType](Enum.Axis[axis:upper()], lineA, lineB)
+		updateFunctionsMap[constraintType](axisEnum, lineA, lineB)
 	else
 		lineA.Adornee = selected
 		lineB.Adornee = nil :: any
-		updateFunctionsMap[constraintType](Enum.Axis[axis:upper()], lineA)
+		updateFunctionsMap[constraintType](axisEnum, lineA)
 	end
-end
-
-function update(selected)
-	selectionBox.Adornee = selected.Parent
-
-	updateLinesByAxis("x", selected, xLineA, xLineB)
-	updateLinesByAxis("y", selected, yLineA, yLineB)
-	updateLinesByAxis("z", selected, zLineA, zLineB)
 end
 
 function selectionDisplay.initializeHighlightContainer()
-	selectionBox = Instance.new("SelectionBox")
-	selectionBox.LineThickness = 0.02
-	selectionBox.SurfaceTransparency = 1
-	selectionBox.Parent = CoreGui
-	selectionBox.Color3 = Color3.fromHex("#f69fd6")
-	selectionBox.SurfaceColor3 = Color3.fromHex("#f69fd6")
-	selectionBox.Visible = true
-	selectionBox.Archivable = false
+	local containerSelectionBox = createSelectionBox(Color3.fromHex("#f69fd6"))
+	local repeatsFromSelectionBox = createSelectionBox(Color3.fromHex("#6fff4f"))
 
-	xLineA = initLine(Color3.fromRGB(200, 75, 75), "xA")
-	xLineB = initLine(Color3.fromRGB(200, 75, 75), "xB")
-	yLineA = initLine(Color3.fromRGB(75, 200, 75), "yA")
-	yLineB = initLine(Color3.fromRGB(75, 200, 75), "yB")
-	zLineA = initLine(Color3.fromRGB(75, 75, 200), "zA")
-	zLineB = initLine(Color3.fromRGB(75, 75, 200), "zB")
+	local xLineA = createLineHandle(Color3.fromRGB(200, 75, 75))
+	local xLineB = createLineHandle(Color3.fromRGB(200, 75, 75))
+	local yLineA = createLineHandle(Color3.fromRGB(75, 200, 75))
+	local yLineB = createLineHandle(Color3.fromRGB(75, 200, 75))
+	local zLineA = createLineHandle(Color3.fromRGB(75, 75, 200))
+	local zLineB = createLineHandle(Color3.fromRGB(75, 75, 200))
 
-	selectionChangedConnection = Selection.SelectionChanged:Connect(function()
-		if selectedChangedConnection then
-			selectedChangedConnection:Disconnect()
-			selectedChangedConnection = nil
-			selectedAttChangedConnection:Disconnect()
-			selectedAttChangedConnection = nil
+	local function update(selected: BasePart)
+		containerSelectionBox.Adornee = selected.Parent
+
+		local repeatsFrom = selected:FindFirstChild("RepeatsFrom") :: ObjectValue
+
+		if repeatsFrom and repeatsFrom:IsA("ObjectValue") then
+			repeatsFromSelectionBox.Adornee = repeatsFrom.Value
+		else
+			repeatsFromSelectionBox.Adornee = nil
 		end
 
-		local selection = Selection:Get()
-		if
-			#selection ~= 1
-			or not (
-				selection[1]:IsA("BasePart")
-				and selection[1].Parent
-				and selection[1].Parent:IsA("BasePart")
-				and selection[1].Parent:GetAttribute("isContainer")
-			)
-		then
-			print("bad selection")
-			-- highlight.Enabled = false
-			selectionBox.Adornee = nil
-			xLineA.Adornee = nil
-			xLineB.Adornee = nil
-			yLineA.Adornee = nil
-			yLineB.Adornee = nil
-			zLineA.Adornee = nil
-			zLineB.Adornee = nil
-			return
-		end
-
-		local selected = selection[1]
-		update(selected)
-		selectedChangedConnection = selected.Changed:Connect(function()
-			update(selected)
-		end)
-		selectedAttChangedConnection = selected.AttributeChanged:Connect(function()
-			update(selected)
-		end)
-	end)
-end
-
-function selectionDisplay.cleanup()
-	selectionChangedConnection:Disconnect()
-	selectionBox:Destroy()
-	xLineA:Destroy()
-	xLineB:Destroy()
-	yLineA:Destroy()
-	yLineB:Destroy()
-	zLineA:Destroy()
-	zLineB:Destroy()
-
-	if selectedChangedConnection then
-		selectedChangedConnection:Disconnect()
-		selectedChangedConnection = nil
-		selectedAttChangedConnection:Disconnect()
-		selectedAttChangedConnection = nil
+		updateLinesByAxis("x", selected, xLineA, xLineB)
+		updateLinesByAxis("y", selected, yLineA, yLineB)
+		updateLinesByAxis("z", selected, zLineA, zLineB)
 	end
+
+	selectionHelper.bindToSingleContainedSelection(update, function()
+		containerSelectionBox.Adornee = nil
+		repeatsFromSelectionBox.Adornee = nil
+		xLineA.Adornee = nil
+		xLineB.Adornee = nil
+		yLineA.Adornee = nil
+		yLineB.Adornee = nil
+		zLineA.Adornee = nil
+		zLineB.Adornee = nil
+	end)
+	selectionHelper.bindToSingleContainedChanged(update)
+
+	return janitor
 end
 
 return selectionDisplay

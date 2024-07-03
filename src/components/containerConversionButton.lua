@@ -1,16 +1,19 @@
+--!strict
 local Selection = game:GetService("Selection")
-local source = script.Parent
-local packages = script.Parent.Parent.Packages
+
+local packages = script.Parent.Parent.Parent.Packages
 local React = require(packages.React)
 local StudioComponents = require(packages.StudioComponents)
-local changeHistoryHelper = require(source.changeHistoryHelper)
-local constraintsPanel = require(source.constraintsPanel)
-local containerHelper = require(source.containerHelper)
-local repeatsPanel = require(source.repeatsPanel)
+
+local source = script.Parent.Parent
+local changeHistoryHelper = require(source.utility.changeHistoryHelper)
+local containerHelper = require(source.utility.containerHelper)
 
 local e = React.createElement
 
-local function containerButton(_props)
+local function containerConversionButton(props)
+	local layoutOrder = props.LayoutOrder
+
 	local selectedModel, setSelectedModel = React.useState(nil)
 	local selectedContainer, setSelectedContainer = React.useState(nil)
 
@@ -48,7 +51,7 @@ local function containerButton(_props)
 	elseif selectedContainer then
 		return e(StudioComponents.Button, {
 			AutomaticSize = Enum.AutomaticSize.XY,
-			LayoutOrder = 3,
+			LayoutOrder = layoutOrder,
 			Text = "Dissolve Container",
 			OnActivated = function()
 				changeHistoryHelper.recordUndoChange(function()
@@ -68,16 +71,4 @@ local function containerButton(_props)
 	end
 end
 
-return function(_props)
-	return e(StudioComponents.Background, {}, {
-		e("UIListLayout", {
-			FillDirection = Enum.FillDirection.Vertical,
-			HorizontalAlignment = Enum.HorizontalAlignment.Center,
-			SortOrder = Enum.SortOrder.LayoutOrder,
-			Padding = UDim.new(0, 8),
-		}),
-		e(constraintsPanel, { LayoutOrder = 1 }),
-		e(repeatsPanel, { LayoutOrder = 2 }),
-		e(containerButton),
-	})
-end
+return containerConversionButton

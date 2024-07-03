@@ -1,18 +1,28 @@
+--!strict
 local packages = script.Parent.Parent.Packages
+local Janitor = require(packages.Janitor)
 local React = require(packages.React)
 local ReactRoblox = require(packages.ReactRoblox)
 local StudioComponents = require(packages.StudioComponents)
 
 local source = script.Parent
-local containerHelper = require(source.containerHelper)
+local containerHelper = require(source.utility.containerHelper)
+local initializePluginActions = require(source.initializePluginActions)
 local scaling = require(source.scaling)
 local selectionDisplay = require(source.selectionDisplay)
-local settingsHelper = require(source.settingsHelper)
-local widgetApp = require(source.widgetApp)
+local selectionHelper = require(source.utility.selectionHelper)
+local settingsHelper = require(source.utility.settingsHelper)
 
-containerHelper.registerCollisionGroup()
-scaling.initializePluginActions(plugin)
-selectionDisplay.initializeHighlightContainer()
+local widgetApp = require(source.components.widgetApp)
+
+local janitor = Janitor.new()
+
+janitor:Add(settingsHelper.stopListening)
+janitor:Add(containerHelper.registerCollisionGroup())
+janitor:Add(selectionDisplay.initializeHighlightContainer())
+janitor:Add(scaling.initializeHandles(plugin))
+janitor:Add(initializePluginActions(plugin))
+janitor:Add(selectionHelper.jantior)
 
 local toolbar = plugin:CreateToolbar("Intelliscale")
 local toggleWidgetButton = toolbar:CreateButton("Intelliscale", "Toggle widget", "")
@@ -26,10 +36,10 @@ widget.Title = "Intelliscale"
 
 function updateWidgetButton()
 	if widget.Enabled then
-		settingsHelper.connect()
+		settingsHelper.listenForChanges()
 		toggleWidgetButton:SetActive(true)
 	else
-		settingsHelper.disconnect()
+		settingsHelper.stopListening()
 		toggleWidgetButton:SetActive(false)
 	end
 end
@@ -45,9 +55,5 @@ root:render(React.createElement(StudioComponents.PluginProvider, { Plugin = plug
 
 plugin.Unloading:Connect(function()
 	root:unmount()
-	settingsHelper.disconnect()
-	containerHelper.unregisterCollisionGroup()
-	selectionDisplay.cleanup()
-	scaling.cleanup()
-	plugin:GetMouse().Icon = ""
+	janitor:Cleanup()
 end)

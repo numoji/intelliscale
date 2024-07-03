@@ -1,13 +1,17 @@
+--!strict
 local Selection = game:GetService("Selection")
 
-local packages = script.Parent.Parent.Packages
+local packages = script.Parent.Parent.Parent.Packages
 local React = require(packages.React)
 local StudioComponents = require(packages.StudioComponents)
 
-local source = script.Parent
-local changeHistoryHelper = require(source.changeHistoryHelper)
-local labeledSettingsPanel = require(source.labeledSettingsPanel)
-local settingsHelper = require(source.settingsHelper)
+local source = script.Parent.Parent
+local changeHistoryHelper = require(source.utility.changeHistoryHelper)
+local settingsHelper = require(source.utility.settingsHelper)
+local types = require(source.types)
+
+local components = script.Parent
+local labeledSettingsPanel = require(components.labeledSettingsPanel)
 
 local e = React.createElement
 
@@ -17,7 +21,12 @@ local minAndMaxNamesByAxis = {
 	z = { "Front", "Back" },
 }
 
-function getConstraintSettingProps(axis, disabled, constraints, defaultOverrides)
+function getConstraintSettingProps(
+	axis: types.AxisString,
+	disabled: boolean,
+	constraints: settingsHelper.ConstraintSettings,
+	defaultOverrides: settingsHelper.ConstraintDefaultOverrides
+)
 	local min = minAndMaxNamesByAxis[axis][1]
 	local max = minAndMaxNamesByAxis[axis][2]
 
@@ -33,7 +42,6 @@ function getConstraintSettingProps(axis, disabled, constraints, defaultOverrides
 				for _, instance in Selection:Get() do
 					if instance:IsA("BasePart") then
 						instance:SetAttribute(axis .. "Constraint", newItem)
-						settingsHelper.updateAllConstraintSettingsForSelection()
 					end
 				end
 			end)
@@ -60,8 +68,6 @@ return function(props)
 				})
 			end
 		)
-
-		settingsHelper.updateAllConstraintSettingsForSelection()
 
 		return function()
 			constraintSettingsChangedConnection:Disconnect()

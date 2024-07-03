@@ -1,3 +1,7 @@
+--!strict
+local source = script.Parent.Parent
+local types = require(source.types)
+
 local geometryHelper = {}
 
 function geometryHelper.getFacePosition(part: BasePart, axis: Vector3)
@@ -87,7 +91,7 @@ geometryHelper.constraintMap = {
 	Center = "Center",
 }
 
-geometryHelper.axisNameByNormalIdMap = {
+local axisNameByNormalIdMap: { [Enum.NormalId]: types.AxisString } = {
 	[Enum.NormalId.Left] = "x",
 	[Enum.NormalId.Right] = "x",
 	[Enum.NormalId.Top] = "y",
@@ -95,6 +99,8 @@ geometryHelper.axisNameByNormalIdMap = {
 	[Enum.NormalId.Front] = "z",
 	[Enum.NormalId.Back] = "z",
 }
+
+geometryHelper.axisNameByNormalIdMap = axisNameByNormalIdMap
 
 geometryHelper.axisEnumByNormalIdMap = {
 	[Enum.NormalId.Left] = Enum.Axis.X,
@@ -110,5 +116,13 @@ geometryHelper.axisByEnum = {
 	[Enum.Axis.Y] = Vector3.yAxis,
 	[Enum.Axis.Z] = Vector3.zAxis,
 }
+
+local axisEnums: { [types.AxisString]: Enum.Axis } = {
+	x = Enum.Axis.X,
+	y = Enum.Axis.Y,
+	z = Enum.Axis.Z,
+}
+
+geometryHelper.axisEnumByString = axisEnums
 
 return geometryHelper

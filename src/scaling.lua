@@ -1,21 +1,19 @@
+--!strict
 local CoreGui = game:GetService("CoreGui")
 local Selection = game:GetService("Selection")
+local packages = script.Parent.Parent.Packages
+local Janitor = require(packages.Janitor)
 
-local changeHistoryHelper = require(script.Parent.changeHistoryHelper)
-local geometryHelper = require(script.Parent.geometryHelper)
+local source = script.Parent
+local changeHistoryHelper = require(source.utility.changeHistoryHelper)
+local geometryHelper = require(source.utility.geometryHelper)
+local round = require(source.utility.round)
+local types = require(source.types)
+
+local janitor = Janitor.new()
 local scaling = {}
 
-local function round(number, increment)
-	return math.floor(number / increment + 0.5) * increment
-end
-
--- Create handles
--- Respond to handle drag events
-
-local selectionChangedConnection
-local scalingHandles
-
-local function getDeltaMovementInAxis(axis: Vector3, newContainerCFrame: CFrame, newContainerSize: Vector3, partToScale: BasePart)
+local function getDeltaMovementInAxis(axis: Vector3, newContainerCFrame: CFrame, newContainerSize: Vector3, partToScale: BasePart): number
 	local currentParentFacePosition = geometryHelper.getFacePosition(partToScale.Parent :: BasePart, axis)
 	local newParentFacePosition = geometryHelper.getFacePositionFromSizeAndCFrame(newContainerSize, newContainerCFrame, axis)
 
@@ -100,17 +98,17 @@ local scaleFunctionsMap: ScaleFunctionsMap = {
 	end,
 }
 
-local function scaleChildrenRecursive(axes: { string }, newSize: Vector3, newCFrame: CFrame, part: BasePart)
+local function scaleChildrenRecursive(axes: { types.AxisString }, newSize: Vector3, newCFrame: CFrame, part: BasePart)
 	for _, child in part:GetChildren() do
 		if child:IsA("BasePart") then
 			local finalPosition = child.Position
 			local finalSize = child.Size
-			for _, axis in axes do
+			for _, axis: types.AxisString in axes do
 				local constraint = child:GetAttribute(`{axis}Constraint`) or "Scale"
 				local constraintType = geometryHelper.constraintMap[constraint]
 
 				local scaleFunction = scaleFunctionsMap[constraintType]
-				local axisEnum = Enum.Axis[axis:upper()]
+				local axisEnum = geometryHelper.axisEnumByString[axis]
 				local deltaPosition, deltaSize = scaleFunction(axisEnum, newCFrame, newSize, child)
 
 				finalPosition += deltaPosition --geometryHelper.getCFrameAxis(newCFrame, axisEnum) * deltaPosition
@@ -124,8 +122,9 @@ local function scaleChildrenRecursive(axes: { string }, newSize: Vector3, newCFr
 	part.CFrame = newCFrame
 end
 
-scaling.initializePluginActions = function(plugin)
-	scalingHandles = Instance.new("Handles")
+local scalingHandles
+function scaling.initializeHandles(plugin)
+	scalingHandles = janitor:Add(Instance.new("Handles"))
 	scalingHandles.Color3 = Color3.fromHex("#f69fd6")
 	scalingHandles.Style = Enum.HandlesStyle.Resize
 	scalingHandles.Visible = false
@@ -134,35 +133,6 @@ scaling.initializePluginActions = function(plugin)
 	scalingHandles.Archivable = false
 
 	local mouse = plugin:GetMouse()
-
-	local toggleHandlesAction =
-		plugin:CreatePluginAction("IntelliscaleToggleHandles", "Intelliscale: Toggle handles", "Toggles intelliscale scaling handles")
-
-	toggleHandlesAction.Triggered:Connect(function()
-		scalingHandles.Visible = not scalingHandles.Visible
-	end)
-
-	Selection.SelectionChanged:Connect(function()
-		local selection = Selection:Get()
-
-		if #selection == 0 then
-			scalingHandles.Adornee = nil
-			return
-		end
-
-		local part = selection[1]
-		if part:IsA("BasePart") and part:GetAttribute("isContainer") then
-			scalingHandles.Adornee = part
-		else
-			scalingHandles.Adornee = nil
-		end
-	end)
-
-	local selectContainerAction = plugin:CreatePluginAction(
-		"intelliscaleSelectContainer",
-		"Intelliscale: Select Contatiner",
-		"Selects intelliscale container selected part is in"
-	)
 
 	local enterIcon = ""
 	local isMouseDown = false
@@ -214,7 +184,7 @@ scaling.initializePluginActions = function(plugin)
 
 		local newContainerSize = scalingPart.Size + axis:Abs() * deltaSize
 		local newContainerCFrame = scalingPart.CFrame * CFrame.new(axis * deltaSize / 2)
-		local axisName = geometryHelper.axisNameByNormalIdMap[face]
+		local axisName: types.AxisString = geometryHelper.axisNameByNormalIdMap[face]
 
 		changeHistoryHelper.recordUndoChange(function()
 			scaleChildrenRecursive({ axisName }, newContainerSize, newContainerCFrame, scalingPart)
@@ -223,34 +193,31 @@ scaling.initializePluginActions = function(plugin)
 		currentSize = newSize
 	end)
 
-	selectContainerAction.Triggered:Connect(function()
-		local selection = Selection:Get()
-
-		if #selection == 0 then
-			return
-		end
-
-		local newSelection = {}
-		for _, instance in selection do
-			if instance:IsA("BasePart") and instance.Parent:IsA("BasePart") and instance.Parent:GetAttribute("isContainer") then
-				table.insert(newSelection, instance.Parent)
-			end
-		end
-
-		Selection:Set(newSelection)
+	janitor:Add(function()
+		plugin:GetMouse().Icon = ""
 	end)
+
+	return janitor
 end
 
-scaling.cleanup = function()
-	if selectionChangedConnection then
-		selectionChangedConnection:Disconnect()
-		selectionChangedConnection = nil
+function scaling.updateHandleAdornee()
+	local selection = Selection:Get()
+
+	if #selection == 0 then
+		scalingHandles.Adornee = nil
+		return
 	end
 
-	if scalingHandles then
-		scalingHandles:Destroy()
-		scalingHandles = nil
+	local part = selection[1]
+	if part:IsA("BasePart") and part:GetAttribute("isContainer") then
+		scalingHandles.Adornee = part
+	else
+		scalingHandles.Adornee = nil
 	end
+end
+
+function scaling.toggleHandleVisibility()
+	scalingHandles.Visible = not scalingHandles.Visible
 end
 
 return scaling

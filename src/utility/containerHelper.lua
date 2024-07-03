@@ -1,14 +1,15 @@
+--!strict
 local PhysicsService = game:GetService("PhysicsService")
 local Selection = game:GetService("Selection")
 local containerHelper = {}
 
 function containerHelper.registerCollisionGroup()
-	PhysicsService:RegisterCollisionGroup("Container")
-	PhysicsService:CollisionGroupSetCollidable("Container", "StudioSelectable", false)
-end
+	PhysicsService:RegisterCollisionGroup("IntelliscaleUnselectable")
+	PhysicsService:CollisionGroupSetCollidable("IntelliscaleUnselectable", "StudioSelectable", false)
 
-function containerHelper.unregisterCollisionGroup()
-	PhysicsService:UnregisterCollisionGroup("Container")
+	return function()
+		PhysicsService:UnregisterCollisionGroup("IntelliscaleUnselectable")
+	end
 end
 
 function containerHelper.makeContainer(model)
@@ -29,7 +30,7 @@ function containerHelper.makeContainer(model)
 
 	model.Parent = nil
 
-	boundingBoxPart.CollisionGroup = "Container"
+	boundingBoxPart.CollisionGroup = "IntelliscaleUnselectable"
 	boundingBoxPart:SetAttribute("isContainer", true)
 
 	Selection:Set({ boundingBoxPart })

@@ -1,3 +1,4 @@
+--!strict
 local ChangeHistoryService = game:GetService("ChangeHistoryService")
 
 local changeHistoryHelper = {}
