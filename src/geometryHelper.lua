@@ -25,19 +25,31 @@ function geometryHelper.getCFrameAxis(cf: CFrame, axisEnum: Enum.Axis)
 	elseif axisEnum == Enum.Axis.Y then
 		return cf.UpVector
 	elseif axisEnum == Enum.Axis.Z then
+		return cf.LookVector
+	else
+		error("Invalid axis enum")
+	end
+end
+
+function geometryHelper.getCFrameAxisZPositive(cf: CFrame, axisEnum: Enum.Axis)
+	if axisEnum == Enum.Axis.X then
+		return cf.RightVector
+	elseif axisEnum == Enum.Axis.Y then
+		return cf.UpVector
+	elseif axisEnum == Enum.Axis.Z then
 		return -cf.LookVector
 	else
 		error("Invalid axis enum")
 	end
 end
 
-function geometryHelper.getPositionComponent(axisEnum: Enum.Axis, position: Vector3)
+function geometryHelper.getComponent(axisEnum: Enum.Axis, vector: Vector3)
 	if axisEnum == Enum.Axis.X then
-		return position.X
+		return vector.X
 	elseif axisEnum == Enum.Axis.Y then
-		return position.Y
+		return vector.Y
 	elseif axisEnum == Enum.Axis.Z then
-		return position.Z
+		return vector.Z
 	else
 		error("Invalid axis enum")
 	end
@@ -73,6 +85,30 @@ geometryHelper.constraintMap = {
 	["Front and Back"] = "MinMax",
 	Scale = "Scale",
 	Center = "Center",
+}
+
+geometryHelper.axisNameByNormalIdMap = {
+	[Enum.NormalId.Left] = "x",
+	[Enum.NormalId.Right] = "x",
+	[Enum.NormalId.Top] = "y",
+	[Enum.NormalId.Bottom] = "y",
+	[Enum.NormalId.Front] = "z",
+	[Enum.NormalId.Back] = "z",
+}
+
+geometryHelper.axisEnumByNormalIdMap = {
+	[Enum.NormalId.Left] = Enum.Axis.X,
+	[Enum.NormalId.Right] = Enum.Axis.X,
+	[Enum.NormalId.Top] = Enum.Axis.Y,
+	[Enum.NormalId.Bottom] = Enum.Axis.Y,
+	[Enum.NormalId.Front] = Enum.Axis.Z,
+	[Enum.NormalId.Back] = Enum.Axis.Z,
+}
+
+geometryHelper.axisByEnum = {
+	[Enum.Axis.X] = Vector3.xAxis,
+	[Enum.Axis.Y] = Vector3.yAxis,
+	[Enum.Axis.Z] = Vector3.zAxis,
 }
 
 return geometryHelper

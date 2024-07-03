@@ -5,14 +5,14 @@ local React = require(packages.React)
 local StudioComponents = require(packages.StudioComponents)
 
 local source = script.Parent
+local changeHistoryHelper = require(source.changeHistoryHelper)
 local labeledSettingsPanel = require(source.labeledSettingsPanel)
-local recordUndoChange = require(source.recordUndoChange)
 local settingsHelper = require(source.settingsHelper)
 
 local e = React.createElement
 
 local function setSelectionAttribute(attribute, value)
-	recordUndoChange(function()
+	changeHistoryHelper.recordUndoChange(function()
 		for _, instance in Selection:Get() do
 			if instance:IsA("BasePart") then
 				instance:SetAttribute(attribute, value)
@@ -23,7 +23,7 @@ end
 
 local function getSettingSetter(axis, settingName)
 	return function(newValue)
-		recordUndoChange(function()
+		changeHistoryHelper.recordUndoChange(function()
 			for _, instance in Selection:Get() do
 				if instance:IsA("BasePart") then
 					if newValue == nil then

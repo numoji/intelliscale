@@ -5,8 +5,8 @@ local React = require(packages.React)
 local StudioComponents = require(packages.StudioComponents)
 
 local source = script.Parent
+local changeHistoryHelper = require(source.changeHistoryHelper)
 local labeledSettingsPanel = require(source.labeledSettingsPanel)
-local recordUndoChange = require(source.recordUndoChange)
 local settingsHelper = require(source.settingsHelper)
 
 local e = React.createElement
@@ -29,7 +29,7 @@ function getConstraintSettingProps(axis, disabled, constraints, defaultOverrides
 		Disabled = disabled,
 		SelectedItem = constraints[axis] or (not disabled and "Scale" or nil),
 		OnItemSelected = function(newItem)
-			recordUndoChange(function()
+			changeHistoryHelper.recordUndoChange(function()
 				for _, instance in Selection:Get() do
 					if instance:IsA("BasePart") then
 						instance:SetAttribute(axis .. "Constraint", newItem)

@@ -19,6 +19,7 @@ local function initLine(color, name)
 	lineHandle.Parent = StarterGui
 	lineHandle.Thickness = 15
 	lineHandle.Color3 = color
+	lineHandle.Archivable = false
 
 	return lineHandle
 end
@@ -114,6 +115,7 @@ function selectionDisplay.initializeHighlightContainer()
 	selectionBox.Color3 = Color3.fromHex("#f69fd6")
 	selectionBox.SurfaceColor3 = Color3.fromHex("#f69fd6")
 	selectionBox.Visible = true
+	selectionBox.Archivable = false
 
 	xLineA = initLine(Color3.fromRGB(200, 75, 75), "xA")
 	xLineB = initLine(Color3.fromRGB(200, 75, 75), "xB")
@@ -133,8 +135,14 @@ function selectionDisplay.initializeHighlightContainer()
 		local selection = Selection:Get()
 		if
 			#selection ~= 1
-			or not (selection[1].Parent and selection[1].Parent:IsA("BasePart") and selection[1].Parent:GetAttribute("isContainer"))
+			or not (
+				selection[1]:IsA("BasePart")
+				and selection[1].Parent
+				and selection[1].Parent:IsA("BasePart")
+				and selection[1].Parent:GetAttribute("isContainer")
+			)
 		then
+			print("bad selection")
 			-- highlight.Enabled = false
 			selectionBox.Adornee = nil
 			xLineA.Adornee = nil

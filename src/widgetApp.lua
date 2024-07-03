@@ -3,9 +3,9 @@ local source = script.Parent
 local packages = script.Parent.Parent.Packages
 local React = require(packages.React)
 local StudioComponents = require(packages.StudioComponents)
+local changeHistoryHelper = require(source.changeHistoryHelper)
 local constraintsPanel = require(source.constraintsPanel)
 local containerHelper = require(source.containerHelper)
-local recordUndoChange = require(source.recordUndoChange)
 local repeatsPanel = require(source.repeatsPanel)
 
 local e = React.createElement
@@ -40,7 +40,7 @@ local function containerButton(_props)
 			LayoutOrder = 3,
 			Text = "Convert to Container",
 			OnActivated = function()
-				recordUndoChange(function()
+				changeHistoryHelper.recordUndoChange(function()
 					containerHelper.makeContainer(selectedModel)
 				end)
 			end,
@@ -51,7 +51,7 @@ local function containerButton(_props)
 			LayoutOrder = 3,
 			Text = "Dissolve Container",
 			OnActivated = function()
-				recordUndoChange(function()
+				changeHistoryHelper.recordUndoChange(function()
 					local kiddos = selectedContainer:GetChildren()
 
 					for _, child in kiddos do
