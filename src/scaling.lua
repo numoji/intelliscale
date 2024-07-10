@@ -1,6 +1,5 @@
 --!strict
 local CoreGui = game:GetService("CoreGui")
-local Selection = game:GetService("Selection")
 local packages = script.Parent.Parent.Packages
 local Janitor = require(packages.Janitor)
 
@@ -9,148 +8,179 @@ local epsilon = 1e-5
 local source = script.Parent
 local changeHistoryHelper = require(source.utility.changeHistoryHelper)
 local geometryHelper = require(source.utility.geometryHelper)
-local repeating = require(source.repeating)
+local realTransform = require(source.utility.realTransform)
 local round = require(source.utility.round)
+local selectionHelper = require(source.utility.selectionHelper)
 local types = require(source.types)
 
 local janitor = Janitor.new()
 local scaling = {}
 
-local function getDeltaMovementInAxis(axis: Vector3, newContainerCFrame: CFrame, newContainerSize: Vector3, partToScale: BasePart): number
-	local currentParentFacePosition = geometryHelper.getFacePosition(partToScale.Parent :: BasePart, axis)
-	local newParentFacePosition = geometryHelper.getFacePositionFromSizeAndCFrame(newContainerSize, newContainerCFrame, axis)
-
-	local offset = newParentFacePosition - currentParentFacePosition
-	local delta = offset:Dot(axis)
-
-	return delta
-end
-
-local function getLocalSpaceFaceComponent(axisEnum: Enum.Axis, sign: number, part: BasePart): number
-	local parent = part.Parent :: BasePart
-	local axis = geometryHelper.getCFrameAxis(parent.CFrame, axisEnum) * sign
-	local localSpaceFacePosition = parent.CFrame:PointToObjectSpace(geometryHelper.getFacePosition(part, axis))
-	return geometryHelper.getComponent(axisEnum, localSpaceFacePosition)
-end
+local partScaledWithHandlesEvent = janitor:Add(Instance.new("BindableEvent"))
+scaling.partScaledWithHandles = partScaledWithHandlesEvent.Event
 
 type ScaleFunctionsMap = {
-	[string]: (
-		axisEnum: Enum.Axis,
-		newContainerCFrame: CFrame,
-		newContainerSize: Vector3,
-		partToScale: BasePart
-	) -> (Vector3, Vector3),
+	[types.ConstraintString]: (Enum.Axis, BasePart, Vector3) -> (CFrame, Vector3),
 }
+
+local function getDeltaPositionFromEdgeConstraint(axisEnum: Enum.Axis, partToScale: BasePart, newParentSize: Vector3): (number, Vector3)
+	local axis = geometryHelper.axisByEnum[axisEnum]
+
+	local parent = partToScale.Parent :: BasePart
+
+	local prevParentSizeInAxis = parent.Size:Dot(axis)
+	local newParentSizeInAxis = newParentSize:Dot(axis)
+
+	return ((newParentSizeInAxis - prevParentSizeInAxis) / 2), axis
+end
+
 local scaleFunctionsMap: ScaleFunctionsMap = {
-	Min = function(axisEnum: Enum.Axis, newContainerCFrame: CFrame, newContainerSize: Vector3, partToScale: BasePart)
-		local axis = -geometryHelper.getCFrameAxis(newContainerCFrame, axisEnum)
-		local deltaMovement = getDeltaMovementInAxis(axis, newContainerCFrame, newContainerSize, partToScale)
-
-		return axis * deltaMovement, Vector3.zero
+	Min = function(axisEnum, partToScale, newParentSize)
+		local deltaMovement, axis = getDeltaPositionFromEdgeConstraint(axisEnum, partToScale, newParentSize)
+		return CFrame.new(-deltaMovement * axis), Vector3.zero
 	end,
-	Max = function(axisEnum: Enum.Axis, newContainerCFrame: CFrame, newContainerSize: Vector3, partToScale: BasePart)
-		local axis = geometryHelper.getCFrameAxis(newContainerCFrame, axisEnum)
-		local deltaMovement = getDeltaMovementInAxis(axis, newContainerCFrame, newContainerSize, partToScale)
-
-		return axis * deltaMovement, Vector3.zero
+	Max = function(axisEnum, partToScale, newParentSize)
+		local deltaMovement, axis = getDeltaPositionFromEdgeConstraint(axisEnum, partToScale, newParentSize)
+		return CFrame.new(deltaMovement * axis), Vector3.zero
 	end,
-	MinMax = function(axisEnum: Enum.Axis, newContainerCFrame: CFrame, newContainerSize: Vector3, partToScale: BasePart)
-		local positiveAxis = geometryHelper.getCFrameAxis(newContainerCFrame, axisEnum)
-		local negativeAxis = -positiveAxis
+	MinMax = function(axisEnum, partToScale, newParentSize)
+		local axis = geometryHelper.axisByEnum[axisEnum]
 
-		local currentMax = getLocalSpaceFaceComponent(axisEnum, 1, partToScale)
-		local currentMin = getLocalSpaceFaceComponent(axisEnum, -1, partToScale)
-		local currentCenter = (currentMax + currentMin) / 2
-		local currentSize = currentMax - currentMin
+		local positionInAxis, sizeInAxis = geometryHelper.getPositionAndSizeInParentAxis(axis, partToScale)
 
-		local newPartMax = currentMax + getDeltaMovementInAxis(positiveAxis, newContainerCFrame, newContainerSize, partToScale)
-		local newPartMin = currentMin - getDeltaMovementInAxis(negativeAxis, newContainerCFrame, newContainerSize, partToScale)
-		local newPartCenter = (newPartMax + newPartMin) / 2
-		local newPartSize = newPartMax - newPartMin
+		local maxPartEdge = positionInAxis + sizeInAxis / 2
+		local minPartEdge = positionInAxis - sizeInAxis / 2
+		local partSize = maxPartEdge - minPartEdge
+		local partCenter = (maxPartEdge + minPartEdge) / 2
 
-		local partAxis = geometryHelper.getCFrameAxis(partToScale.CFrame, axisEnum)
-		return positiveAxis * (newPartCenter - currentCenter), partAxis * (newPartSize - currentSize)
+		local edgeDeltaPosition = getDeltaPositionFromEdgeConstraint(axisEnum, partToScale, newParentSize)
+		local newMaxPartEdge = maxPartEdge + edgeDeltaPosition
+		local newMinPartEdge = minPartEdge - edgeDeltaPosition
+		local newPartSize = newMaxPartEdge - newMinPartEdge
+		local newPartCenter = (newMaxPartEdge + newMinPartEdge) / 2
+
+		local deltaMovement = newPartCenter - partCenter
+		local deltaSize = newPartSize - partSize
+
+		return CFrame.new(deltaMovement * axis), deltaSize * axis
 	end,
-	Center = function(axisEnum: Enum.Axis, newContainerCFrame: CFrame, _newContainerSize: Vector3, partToScale: BasePart)
-		local axis = geometryHelper.getCFrameAxis(newContainerCFrame, axisEnum)
-		local container = partToScale.Parent :: BasePart
-
-		local currentContainerCenter = container.Position
-		local newContainerCenter = newContainerCFrame.Position
-
-		local offset = newContainerCenter - currentContainerCenter
-
-		return offset:Dot(axis) * axis, Vector3.zero
+	Center = function()
+		return CFrame.identity, Vector3.zero
 	end,
-	Scale = function(axisEnum: Enum.Axis, newContainerCFrame: CFrame, newContainerSize: Vector3, partToScale: BasePart)
-		local axis = geometryHelper.getCFrameAxisZPositive(newContainerCFrame, axisEnum)
-		local container = partToScale.Parent :: BasePart
+	Scale = function(axisEnum, partToScale, newParentSize: Vector3)
+		local axis = geometryHelper.axisByEnum[axisEnum]
 
-		local sizeChange = geometryHelper.getComponent(axisEnum, newContainerSize) / geometryHelper.getComponent(axisEnum, container.Size)
+		local positionInAxis, sizeInAxis = geometryHelper.getPositionAndSizeInParentAxis(axis, partToScale)
 
-		local currentPosition = geometryHelper.getComponent(axisEnum, container.CFrame:PointToObjectSpace(partToScale.Position))
-		local currentSize = partToScale.Size:Dot(axis)
+		local parent = partToScale.Parent :: BasePart
+		local parentSizeScalar = newParentSize:Dot(axis) / parent.Size:Dot(axis)
 
-		local plainAxis = geometryHelper.axisByEnum[axisEnum]
-		local newGlobalPosition = (newContainerCFrame * CFrame.new(plainAxis * currentPosition * sizeChange)).Position
+		local newSize = sizeInAxis * parentSizeScalar
+		local newPosition = positionInAxis * parentSizeScalar
 
-		local deltaPosition = newGlobalPosition - partToScale.Position
+		local deltaMovement = newPosition - positionInAxis
+		local deltaSize = newSize - sizeInAxis
 
-		local partAxis = geometryHelper.axisByEnum[axisEnum]
-		return axis * deltaPosition:Dot(axis), partAxis * ((currentSize * sizeChange) - currentSize)
+		return CFrame.new(deltaMovement * axis), deltaSize * axis
 	end,
 }
 
-local function moveChildrenRecursive(deltaPosition: Vector3, part: BasePart)
+function scaling.moveChildrenRecursive(deltaPosition: Vector3, part: BasePart)
 	for _, child in part:GetChildren() do
 		if child:IsA("BasePart") then
-			moveChildrenRecursive(deltaPosition, child)
+			scaling.moveChildrenRecursive(deltaPosition, child)
 		end
 	end
 
 	part.Position += deltaPosition
 end
 
-local function scaleChildrenRecursive(
-	axes: { types.AxisString },
+function scaling.cframeChildrenRecursive(
+	part: BasePart,
+	deltaCFrame: CFrame?,
+	shouldNotMoveStretchRepeat: boolean?,
+	shouldMoveRepeats: boolean?,
+	newParentCFrame: CFrame?,
+	parentCFrame: CFrame?
+)
+	local currentCFrame = part.CFrame
+	local shouldUseAttribute = false
+	if shouldNotMoveStretchRepeat and selectionHelper.isValidContained(part) and realTransform.hasCFrame(part) then
+		currentCFrame = realTransform.getGlobalCFrame(part, parentCFrame)
+		shouldUseAttribute = true
+	end
+
+	local newCFrame
+	if deltaCFrame and not (parentCFrame and newParentCFrame) then
+		newCFrame = currentCFrame * deltaCFrame
+	else
+		newCFrame = newParentCFrame * parentCFrame:ToObjectSpace(part.CFrame)
+	end
+
+	if shouldUseAttribute then
+		realTransform.setGlobalCFrame(part, newCFrame, newParentCFrame)
+		return
+	end
+
+	for _, child in part:GetChildren() do
+		if child:IsA("BasePart") then
+			scaling.cframeChildrenRecursive(child, nil, true, true, newCFrame, currentCFrame)
+		elseif child:IsA("Folder") and shouldMoveRepeats then
+			for _, folderChild in child:GetChildren() do
+				if folderChild:IsA("BasePart") then
+					scaling.cframeChildrenRecursive(folderChild, nil, true, true, newCFrame, currentCFrame)
+				end
+			end
+		end
+	end
+
+	part.CFrame = newCFrame
+end
+
+function scaling.moveAndScaleChildrenRecursive(
+	part: BasePart,
 	newSize: Vector3,
 	newCFrame: CFrame,
-	part: BasePart,
-	changedList: { BasePart }
+	axes: { types.AxisString },
+	changedList: { BasePart },
+	shouldNotResizeStretchedRepeat: boolean?,
+	newParentCFrame: CFrame?
 )
+	if shouldNotResizeStretchedRepeat and realTransform.hasTransform(part) then
+		realTransform.setSizeAndGlobalCFrame(part, newSize, newCFrame, newParentCFrame)
+		return
+	end
+
 	for _, child in part:GetChildren() do
 		if child:IsA("BasePart") then
 			table.insert(changedList, 1, child)
-			local totalDeltaPosition = Vector3.zero
+			local totalRelativeDeltaCFrame = CFrame.identity
 			local totalDeltaSize = Vector3.zero
 			for _, axis: types.AxisString in axes do
 				local constraint = child:GetAttribute(`{axis}Constraint`) or "Scale"
-				local constraintType = geometryHelper.constraintMap[constraint]
+				local constraintType: types.ConstraintString = geometryHelper.constraintMap[constraint]
 
 				local scaleFunction = scaleFunctionsMap[constraintType]
 				local axisEnum = geometryHelper.axisEnumByString[axis]
-				local deltaPosition, deltaSize = scaleFunction(axisEnum, newCFrame, newSize, child)
+				local relativeDeltaCFrame, deltaSize = scaleFunction(axisEnum, child, newSize)
 
-				totalDeltaPosition += deltaPosition --geometryHelper.getCFrameAxis(newCFrame, axisEnum) * deltaPosition
-				totalDeltaSize += deltaSize --geometryHelper.getCFrameAxis(child.CFrame, axisEnum) * deltaSize
+				totalRelativeDeltaCFrame *= relativeDeltaCFrame
+				totalDeltaSize += deltaSize
 			end
 
-			if totalDeltaPosition.Magnitude < epsilon then
-				totalDeltaPosition = Vector3.zero
+			if totalRelativeDeltaCFrame.Position.Magnitude < epsilon then
+				totalRelativeDeltaCFrame = CFrame.identity
 			end
 
-			if totalDeltaPosition == Vector3.zero and totalDeltaSize == Vector3.zero then
-				continue
-			elseif totalDeltaSize == Vector3.zero then
-				moveChildrenRecursive(totalDeltaPosition, child)
+			local size, relativeCFrame = realTransform.getSizeAndRelativeCFrame(child)
+			local childCFrame = part.CFrame * relativeCFrame
+			local newChildCFrame = newCFrame * totalRelativeDeltaCFrame * relativeCFrame
+			local newChildSize = size + totalDeltaSize
+
+			if totalDeltaSize == Vector3.zero then
+				scaling.cframeChildrenRecursive(child, childCFrame:ToObjectSpace(newChildCFrame), true, true, newCFrame)
 			else
-				scaleChildrenRecursive(
-					axes,
-					child.Size + totalDeltaSize,
-					CFrame.new(child.Position + totalDeltaPosition),
-					child,
-					changedList
-				)
+				scaling.moveAndScaleChildrenRecursive(child, newChildSize, newChildCFrame, axes, changedList, true, newCFrame)
 			end
 		end
 	end
@@ -212,24 +242,29 @@ function scaling.initializeHandles(plugin)
 		local newSize = beginningSize + round(distance, plugin.GridSize)
 		if newSize == currentSize or newSize < plugin.GridSize then
 			return
-		else
-			print(newSize)
 		end
 
 		local deltaSize = newSize - currentSize
 		local axis = geometryHelper.getAxisFromNormalId(face, CFrame.new())
 
-		local newContainerSize = scalingPart.Size + axis:Abs() * deltaSize
-		local newContainerCFrame = scalingPart.CFrame * CFrame.new(axis * deltaSize / 2)
+		local newParentSize = scalingPart.Size + axis:Abs() * deltaSize
+		local newParentCFrame = scalingPart.CFrame * CFrame.new(axis * deltaSize / 2)
 		local axisName: types.AxisString = geometryHelper.axisNameByNormalIdMap[face]
 
-		local changedList = { scalingPart }
+		local relativeCFrameOrSizeChangedList = { scalingPart }
 
 		changeHistoryHelper.recordUndoChange(function()
-			scaleChildrenRecursive({ axisName }, newContainerSize, newContainerCFrame, scalingPart, changedList)
+			scaling.moveAndScaleChildrenRecursive(
+				scalingPart,
+				newParentSize,
+				newParentCFrame,
+				{ axisName },
+				relativeCFrameOrSizeChangedList,
+				true
+			)
 		end)
 
-		repeating.updateRepeatsFromSizeOrPositionChanges(changedList)
+		partScaledWithHandlesEvent:Fire(relativeCFrameOrSizeChangedList)
 
 		currentSize = newSize
 	end)
@@ -238,23 +273,13 @@ function scaling.initializeHandles(plugin)
 		plugin:GetMouse().Icon = ""
 	end)
 
+	janitor:Add(selectionHelper.bindToSingleContainerSelection(function(selectedPart: BasePart)
+		scalingHandles.Adornee = selectedPart
+	end, function()
+		scalingHandles.Adornee = nil
+	end))
+
 	return janitor
-end
-
-function scaling.updateHandleAdornee()
-	local selection = Selection:Get()
-
-	if #selection == 0 then
-		scalingHandles.Adornee = nil
-		return
-	end
-
-	local part = selection[1]
-	if part:IsA("BasePart") and part:GetAttribute("isContainer") then
-		scalingHandles.Adornee = part
-	else
-		scalingHandles.Adornee = nil
-	end
 end
 
 function scaling.toggleHandleVisibility()

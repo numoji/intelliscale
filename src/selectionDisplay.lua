@@ -18,7 +18,7 @@ local function createLineHandle(color)
 	local lineHandle = janitor:Add(Instance.new("LineHandleAdornment"))
 	lineHandle.AlwaysOnTop = true
 	lineHandle.Parent = CoreGui
-	lineHandle.Thickness = 15
+	lineHandle.Thickness = 22
 	lineHandle.Color3 = color
 	lineHandle.Archivable = false
 
@@ -36,63 +36,80 @@ local function createSelectionBox(color)
 	return selectionBox
 end
 
-local function drawLine(line: LineHandleAdornment, start: Vector3, finish: Vector3)
-	local adornee = line.Adornee :: BasePart
-	line.CFrame = adornee.CFrame:ToObjectSpace(CFrame.lookAt(start, finish))
-	line.Length = (start - finish).Magnitude
-end
-
-local function drawLineBetweenFaces(axis, line)
+local function drawLineInParentSpace(line: LineHandleAdornment, start: Vector3, finish: Vector3)
 	local adornee = line.Adornee :: BasePart
 	local parent = adornee.Parent :: BasePart
 
-	local adorneeFace = geometryHelper.getFacePosition(adornee, axis)
-	local parentFace = geometryHelper.getFacePosition(parent, axis)
-	local adorneeFaceToParentFace = (parentFace - adorneeFace)
-	local parentFaceFinsih = adorneeFace + adorneeFaceToParentFace:Dot(axis) * axis
+	local rawLineCFrame = CFrame.lookAt(start, finish)
+	local parentSpaceLineCFrame = parent.CFrame * rawLineCFrame
 
-	drawLine(line, adorneeFace, parentFaceFinsih)
+	line.CFrame = adornee.CFrame:ToObjectSpace(parentSpaceLineCFrame)
+	line.Length = (start - finish).Magnitude
 end
 
-local updateFunctionsMap = {
+local function drawLineBetweenFaces(axisEnum: Enum.Axis, sign: number, line: LineHandleAdornment)
+	local axis = geometryHelper.axisByEnum[axisEnum]
+	local adornee = line.Adornee :: BasePart
+	local parent = adornee.Parent :: BasePart
+
+	local relativeCFrame = parent.CFrame:ToObjectSpace(adornee.CFrame)
+	local positionInAxis = relativeCFrame.Position:Dot(axis)
+
+	local relativeAxis = relativeCFrame:VectorToObjectSpace(axis)
+	local sizeInAxis = math.abs(adornee.Size:Dot(relativeAxis))
+	local parentSizeInAxis = parent.Size:Dot(axis)
+
+	local adorneeFaceOffsetInAxis = sizeInAxis * sign / 2
+	local parentFaceOffsetInAxis = parentSizeInAxis * sign / 2 - positionInAxis
+
+	local adorneeFacePosition = relativeCFrame.Position + adorneeFaceOffsetInAxis * axis
+	local parentFacePosition = relativeCFrame.Position + parentFaceOffsetInAxis * axis
+
+	drawLineInParentSpace(line, adorneeFacePosition, parentFacePosition)
+end
+
+type UpdateFunctionsMap = {
+	[string]: (Enum.Axis, LineHandleAdornment, LineHandleAdornment) -> (),
+}
+local updateFunctionsMap: UpdateFunctionsMap = {
 	Min = function(axisEnum: Enum.Axis, line: LineHandleAdornment)
-		local parent = line.Adornee.Parent :: BasePart
-		local axis = -geometryHelper.getCFrameAxis(parent.CFrame, axisEnum)
-		drawLineBetweenFaces(axis, line)
+		drawLineBetweenFaces(axisEnum, -1, line)
 	end,
 	Max = function(axisEnum: Enum.Axis, line: LineHandleAdornment)
-		local parent = line.Adornee.Parent :: BasePart
-		local axis = geometryHelper.getCFrameAxis(parent.CFrame, axisEnum)
-		drawLineBetweenFaces(axis, line)
+		drawLineBetweenFaces(axisEnum, 1, line)
 	end,
 	MinMax = function(axisEnum: Enum.Axis, lineA: LineHandleAdornment, lineB: LineHandleAdornment)
-		local parent = lineA.Adornee.Parent :: BasePart
-		local axis = geometryHelper.getCFrameAxis(parent.CFrame, axisEnum)
-		drawLineBetweenFaces(axis, lineA)
-		axis = -geometryHelper.getCFrameAxis(parent.CFrame, axisEnum)
-		drawLineBetweenFaces(axis, lineB)
+		drawLineBetweenFaces(axisEnum, -1, lineA)
+		drawLineBetweenFaces(axisEnum, 1, lineB)
 	end,
 	Center = function(axisEnum: Enum.Axis, line: LineHandleAdornment)
+		local axis = geometryHelper.axisByEnum[axisEnum]
+
 		local adornee = line.Adornee :: BasePart
 		local parent = adornee.Parent :: BasePart
-		local axis = geometryHelper.getCFrameAxis(parent.CFrame, axisEnum)
 
-		local adorneeToParentVector = (parent.Position - adornee.Position)
+		local relativeCFrame = parent.CFrame:ToObjectSpace(adornee.CFrame)
+		local positionInAxis = relativeCFrame.Position:Dot(axis)
 
-		local start = adornee.Position
-		local finish = adornee.Position + adorneeToParentVector:Dot(axis) * axis
+		local start = relativeCFrame.Position
+		local finish = relativeCFrame.Position - positionInAxis * axis
 
-		drawLine(line, start, finish)
+		drawLineInParentSpace(line, start, finish)
 	end,
 	Scale = function(axisEnum: Enum.Axis, line: LineHandleAdornment)
+		local axis = geometryHelper.axisByEnum[axisEnum]
+
 		local adornee = line.Adornee :: BasePart
 		local parent = adornee.Parent :: BasePart
-		local axis = geometryHelper.getCFrameAxis(parent.CFrame, axisEnum)
 
-		local start = adornee.Position - (axis / 2)
-		local finish = adornee.Position + (axis / 2)
+		local relativeCFrame = parent.CFrame:ToObjectSpace(adornee.CFrame)
+		local relativeAxis = relativeCFrame:VectorToObjectSpace(axis)
+		local sizeInAxis = math.abs(adornee.Size:Dot(relativeAxis))
 
-		drawLine(line, start, finish)
+		local start = relativeCFrame.Position + (sizeInAxis / 2 + 0.5) * axis
+		local finish = relativeCFrame.Position - (sizeInAxis / 2 + 0.5) * axis
+
+		drawLineInParentSpace(line, start, finish)
 	end,
 }
 
@@ -105,29 +122,29 @@ local function updateLinesByAxis(axis: types.AxisString, selected: BasePart, lin
 	if constraintType == "MinMax" then
 		lineA.Adornee = selected
 		lineB.Adornee = selected
-		updateFunctionsMap[constraintType](axisEnum, lineA, lineB)
 	else
 		lineA.Adornee = selected
 		lineB.Adornee = nil :: any
-		updateFunctionsMap[constraintType](axisEnum, lineA)
 	end
+
+	updateFunctionsMap[constraintType](axisEnum, lineA, lineB)
 end
 
 function selectionDisplay.initializeHighlightContainer()
 	local containerSelectionBox = createSelectionBox(Color3.fromHex("#f69fd6"))
 	local repeatsFromSelectionBox = createSelectionBox(Color3.fromHex("#6fff4f"))
 
-	local xLineA = createLineHandle(Color3.fromRGB(200, 75, 75))
-	local xLineB = createLineHandle(Color3.fromRGB(200, 75, 75))
-	local yLineA = createLineHandle(Color3.fromRGB(75, 200, 75))
-	local yLineB = createLineHandle(Color3.fromRGB(75, 200, 75))
-	local zLineA = createLineHandle(Color3.fromRGB(75, 75, 200))
-	local zLineB = createLineHandle(Color3.fromRGB(75, 75, 200))
+	local xLineA = createLineHandle(Color3.fromRGB(255, 90, 0))
+	local xLineB = createLineHandle(Color3.fromRGB(255, 90, 0))
+	local yLineA = createLineHandle(Color3.fromRGB(0, 255, 90))
+	local yLineB = createLineHandle(Color3.fromRGB(0, 255, 90))
+	local zLineA = createLineHandle(Color3.fromRGB(90, 0, 255))
+	local zLineB = createLineHandle(Color3.fromRGB(90, 0, 255))
 
-	local function update(selected: BasePart)
-		containerSelectionBox.Adornee = selected.Parent
+	local function update(selectedPart: BasePart)
+		containerSelectionBox.Adornee = selectedPart.Parent
 
-		local repeatsFrom = selected:FindFirstChild("RepeatsFrom") :: ObjectValue
+		local repeatsFrom = selectedPart:FindFirstChild("RepeatsFrom") :: ObjectValue
 
 		if repeatsFrom and repeatsFrom:IsA("ObjectValue") then
 			repeatsFromSelectionBox.Adornee = repeatsFrom.Value
@@ -135,9 +152,9 @@ function selectionDisplay.initializeHighlightContainer()
 			repeatsFromSelectionBox.Adornee = nil
 		end
 
-		updateLinesByAxis("x", selected, xLineA, xLineB)
-		updateLinesByAxis("y", selected, yLineA, yLineB)
-		updateLinesByAxis("z", selected, zLineA, zLineB)
+		updateLinesByAxis("x", selectedPart, xLineA, xLineB)
+		updateLinesByAxis("y", selectedPart, yLineA, yLineB)
+		updateLinesByAxis("z", selectedPart, zLineA, zLineB)
 	end
 
 	selectionHelper.bindToSingleContainedSelection(update, function()

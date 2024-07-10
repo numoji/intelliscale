@@ -4,49 +4,6 @@ local types = require(source.types)
 
 local geometryHelper = {}
 
-function geometryHelper.getFacePosition(part: BasePart, axis: Vector3)
-	local cf: CFrame = part.CFrame
-	local halfSize = part.Size / 2
-	local xOffset = cf.RightVector:Dot(axis) * halfSize.X
-	local yOffset = cf.UpVector:Dot(axis) * halfSize.Y
-	local zOffset = cf.LookVector:Dot(axis) * halfSize.Z
-
-	return part.Position + Vector3.new(xOffset, yOffset, zOffset)
-end
-
-function geometryHelper.getFacePositionFromSizeAndCFrame(size: Vector3, cf: CFrame, axis: Vector3)
-	local halfSize = size / 2
-	local xOffset = cf.RightVector:Dot(axis) * halfSize.X
-	local yOffset = cf.UpVector:Dot(axis) * halfSize.Y
-	local zOffset = cf.LookVector:Dot(axis) * halfSize.Z
-
-	return cf.Position + Vector3.new(xOffset, yOffset, zOffset)
-end
-
-function geometryHelper.getCFrameAxis(cf: CFrame, axisEnum: Enum.Axis)
-	if axisEnum == Enum.Axis.X then
-		return cf.RightVector
-	elseif axisEnum == Enum.Axis.Y then
-		return cf.UpVector
-	elseif axisEnum == Enum.Axis.Z then
-		return cf.LookVector
-	else
-		error("Invalid axis enum")
-	end
-end
-
-function geometryHelper.getCFrameAxisZPositive(cf: CFrame, axisEnum: Enum.Axis)
-	if axisEnum == Enum.Axis.X then
-		return cf.RightVector
-	elseif axisEnum == Enum.Axis.Y then
-		return cf.UpVector
-	elseif axisEnum == Enum.Axis.Z then
-		return -cf.LookVector
-	else
-		error("Invalid axis enum")
-	end
-end
-
 function geometryHelper.getComponent(axisEnum: Enum.Axis, vector: Vector3)
 	if axisEnum == Enum.Axis.X then
 		return vector.X
@@ -77,6 +34,17 @@ function geometryHelper.getAxisFromNormalId(normalId: Enum.NormalId, cf: CFrame)
 	end
 end
 
+function geometryHelper.getPositionAndSizeInParentAxis(axis: Vector3, part: BasePart)
+	local parent = part.Parent :: BasePart
+	local relativeCFrame = parent.CFrame:ToObjectSpace(part.CFrame)
+	local positionInAxis = relativeCFrame.Position:Dot(axis)
+
+	local relativeAxis = relativeCFrame:VectorToObjectSpace(axis)
+	local sizeInAxis = math.abs(part.Size:Dot(relativeAxis))
+
+	return positionInAxis, sizeInAxis
+end
+
 geometryHelper.constraintMap = {
 	Left = "Min",
 	Right = "Max",
@@ -89,18 +57,16 @@ geometryHelper.constraintMap = {
 	["Front and Back"] = "MinMax",
 	Scale = "Scale",
 	Center = "Center",
-}
+} :: { [string]: types.ConstraintString }
 
-local axisNameByNormalIdMap: { [Enum.NormalId]: types.AxisString } = {
+geometryHelper.axisNameByNormalIdMap = {
 	[Enum.NormalId.Left] = "x",
 	[Enum.NormalId.Right] = "x",
 	[Enum.NormalId.Top] = "y",
-	[Enum.NormalId.Bottom] = "y",
+	[Enum.NormalId.Bottom] = "z",
 	[Enum.NormalId.Front] = "z",
 	[Enum.NormalId.Back] = "z",
-}
-
-geometryHelper.axisNameByNormalIdMap = axisNameByNormalIdMap
+} :: { [Enum.NormalId]: types.AxisString }
 
 geometryHelper.axisEnumByNormalIdMap = {
 	[Enum.NormalId.Left] = Enum.Axis.X,
@@ -109,20 +75,18 @@ geometryHelper.axisEnumByNormalIdMap = {
 	[Enum.NormalId.Bottom] = Enum.Axis.Y,
 	[Enum.NormalId.Front] = Enum.Axis.Z,
 	[Enum.NormalId.Back] = Enum.Axis.Z,
-}
+} :: { [Enum.NormalId]: Enum.Axis }
 
 geometryHelper.axisByEnum = {
 	[Enum.Axis.X] = Vector3.xAxis,
 	[Enum.Axis.Y] = Vector3.yAxis,
 	[Enum.Axis.Z] = Vector3.zAxis,
-}
+} :: { [Enum.Axis]: Vector3 }
 
-local axisEnums: { [types.AxisString]: Enum.Axis } = {
+geometryHelper.axisEnumByString = {
 	x = Enum.Axis.X,
 	y = Enum.Axis.Y,
 	z = Enum.Axis.Z,
-}
-
-geometryHelper.axisEnumByString = axisEnums
+} :: { [types.AxisString]: Enum.Axis }
 
 return geometryHelper

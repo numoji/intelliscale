@@ -8,6 +8,7 @@ local StudioComponents = require(packages.StudioComponents)
 local source = script.Parent.Parent
 local attributeHelper = require(source.utility.attributeHelper)
 local changeHistoryHelper = require(source.utility.changeHistoryHelper)
+local selectionHelper = require(source.utility.selectionHelper)
 local settingsHelper = require(source.utility.settingsHelper)
 local types = require(source.types)
 
@@ -18,10 +19,8 @@ local e = React.createElement
 
 local function setSelectionAttribute(attribute, value)
 	changeHistoryHelper.recordUndoChange(function()
-		for _, instance in Selection:Get() do
-			if instance:IsA("BasePart") then
-				attributeHelper.setAttribute(instance, attribute, value)
-			end
+		for _, instance in selectionHelper.getContainedAndContainerSelection() do
+			attributeHelper.setAttribute(instance, attribute, value)
 		end
 	end)
 end
@@ -29,15 +28,13 @@ end
 local function getSettingSetter(axis: types.AxisString, settingName: string)
 	return function(newValue)
 		changeHistoryHelper.recordUndoChange(function()
-			for _, instance in Selection:Get() do
-				if instance:IsA("BasePart") then
-					if newValue == nil then
-						local currentValue = instance:GetAttribute(axis .. settingName)
-						newValue = not currentValue
-					end
-
-					attributeHelper.setAttribute(instance, axis .. settingName, newValue)
+			for _, instance in selectionHelper.getContainedAndContainerSelection() do
+				if newValue == nil then
+					local currentValue = instance:GetAttribute(axis .. settingName)
+					newValue = not currentValue
 				end
+
+				attributeHelper.setAttribute(instance, axis .. settingName, newValue)
 			end
 		end)
 	end

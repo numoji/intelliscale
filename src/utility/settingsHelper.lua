@@ -175,9 +175,10 @@ function settingsHelper.listenForChanges()
 		updateRepeatSettingsInvalid()
 	end))
 
-	janitor:Add(selectionHelper.bindToAnyContainedChanged(function(selection)
-		updateConstraintSettingsValid(selection)
-		updateRepeatSettingsValid(selection)
+	janitor:Add(selectionHelper.bindToAnyContainedChanged(function()
+		local containedSelection = selectionHelper.getContainedSelection()
+		updateConstraintSettingsValid(containedSelection)
+		updateRepeatSettingsValid(containedSelection)
 	end))
 end
 

@@ -5,6 +5,11 @@ local containerHelper = {}
 
 function containerHelper.registerCollisionGroup()
 	PhysicsService:RegisterCollisionGroup("IntelliscaleUnselectable")
+
+	if not PhysicsService:IsCollisionGroupRegistered("StudioSelectable") then
+		PhysicsService:RegisterCollisionGroup("StudioSelectable")
+	end
+
 	PhysicsService:CollisionGroupSetCollidable("IntelliscaleUnselectable", "StudioSelectable", false)
 
 	return function()
@@ -14,7 +19,11 @@ end
 
 function containerHelper.makeContainer(model)
 	local boundingBoxPart = Instance.new("Part")
-	boundingBoxPart.Name = model.Name
+	if model.Name == "Model" then
+		boundingBoxPart.Name = "Container"
+	else
+		boundingBoxPart.Name = model.Name
+	end
 	boundingBoxPart.Anchored = true
 	boundingBoxPart.CanCollide = false
 

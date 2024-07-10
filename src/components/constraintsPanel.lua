@@ -2,12 +2,14 @@
 local Selection = game:GetService("Selection")
 
 local packages = script.Parent.Parent.Parent.Packages
+
 local React = require(packages.React)
 local StudioComponents = require(packages.StudioComponents)
 
 local source = script.Parent.Parent
 local attributeHelper = require(source.utility.attributeHelper)
 local changeHistoryHelper = require(source.utility.changeHistoryHelper)
+local selectionHelper = require(source.utility.selectionHelper)
 local settingsHelper = require(source.utility.settingsHelper)
 local types = require(source.types)
 
@@ -40,7 +42,7 @@ function getConstraintSettingProps(
 		SelectedItem = constraints[axis] or (not disabled and "Scale" or nil),
 		OnItemSelected = function(newItem)
 			changeHistoryHelper.recordUndoChange(function()
-				for _, instance in Selection:Get() do
+				for _, instance in selectionHelper.getContainedAndContainerSelection() do
 					if instance:IsA("BasePart") then
 						attributeHelper.setAttribute(instance, axis .. "Constraint", newItem)
 					end
