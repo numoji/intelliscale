@@ -4,6 +4,7 @@ local Janitor = require(packages.Janitor)
 local React = require(packages.React)
 local ReactRoblox = require(packages.ReactRoblox)
 local StudioComponents = require(packages.StudioComponents)
+local selectThrough = require(script.Parent.selectThrough)
 
 local source = script.Parent
 local changeCatcher = require(source.changeCatcher)
@@ -27,6 +28,7 @@ janitor:Add(repeating.initializeRepeating())
 janitor:Add(scaling.initializeHandles(plugin))
 janitor:Add(selectionDisplay.initializeHighlightContainer())
 janitor:Add(selectionHelper.jantior)
+janitor:Add(selectThrough.initialize())
 janitor:Add(settingsHelper.stopListening)
 janitor:Add(studioHandlesStalker.initialize())
 

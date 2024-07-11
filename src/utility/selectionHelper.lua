@@ -76,6 +76,8 @@ local either: BindingsDictionary = {
 	},
 }
 
+local any: { ValidCallback } = {}
+
 local function createInserter<ValidCallbackType, InvalidCallbackType>(validArray: { ValidCallbackType }, invalidArray: { InvalidCallbackType })
 	return function(validFunction: ValidCallbackType, invalidFunction: InvalidCallbackType)
 		table.insert(validArray, validFunction)
@@ -132,6 +134,8 @@ selectionHelper.bindToSingleContainerAttributeChanged = createSingleInserter(con
 selectionHelper.bindToAnyEitherAttributeChanged = createSingleInserter(either.attChanged)
 selectionHelper.bindToSingleEitherAttributeChanged = createSingleInserter(either.single.attChanged)
 
+selectionHelper.bindToAnySelection = createSingleInserter(any)
+
 type ValidatorOverload = ((Instance) -> boolean) & ((Selection) -> boolean)
 local function createValidator(validateFunction: (Instance) -> boolean)
 	local validator: ValidatorOverload = function(instanceOrSelection)
@@ -172,14 +176,14 @@ end)
 
 --stylua: ignore
 type CallInArrayOverload = 
-	({InvalidCallback}, nil?, nil?) -> () 
-	& ({ValidCallback}, Selection, Selection) -> () 
-	& ({SingleValidCallback}, BasePart, BasePart) -> ()
+	({InvalidCallback}, nil?, nil?, nil?) -> () 
+	& ({ValidCallback}, Selection, Selection, nil?) -> () 
+	& ({SingleValidCallback}, BasePart, BasePart, nil?) -> ()
 	& ({ChangedCallback}, Instance, Selection, Selection) -> ()
 	& ({SingleChangedCallback}, Instance, BasePart, BasePart) -> ()
-local callInArray: CallInArrayOverload = function(callbackArray, selection, fauxSelection)
+local callInArray: CallInArrayOverload = function(callbackArray, selectionOrChanged, fauxSelectionOrSelection, fauxSelection)
 	for _, callbackFunc in callbackArray do
-		callbackFunc(selection, fauxSelection)
+		callbackFunc(selectionOrChanged, fauxSelectionOrSelection, fauxSelection)
 	end
 end
 
@@ -437,6 +441,8 @@ function selectionHelper.updateSelection()
 	local selection, fauxSelection = getSelectionAndFauxSelection()
 	cachedSelection = selection
 	cachedFauxSelection = fauxSelection
+
+	callInArray(any, selection, fauxSelection)
 
 	if #selection == 0 then
 		callAllInvalid()

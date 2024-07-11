@@ -33,20 +33,18 @@ local function cacheSelectionInitialProps(selection: { Instance })
 
 	for _, instance in pairs(selection) do
 		local realInstance = selectionHelper.getRealInstance(instance)
+
 		if selectionHelper.isValidContainedOrContainer(realInstance) and realInstance:IsA("BasePart") and instance:IsA("BasePart") then
 			if selectionHelper.isValidContained(realInstance) then
 				-- We only need to catch non-orthagonal rotations if the part is
 				-- inside a container
 				table.insert(rotationCatching, instance)
+			end
 
-				-- If part has any repeat settings, its at least dependent on
-				-- rotation and size changes to update the repeats. If it uses
-				-- extents settings, we'll want to check for position changes as well.
-				if repeating.doesPartHaveAnyRepeatSettings(realInstance) then
-					initialProps.cframes[instance] = instance.CFrame
-					initialProps.sizes[instance] = instance.Size
-					continue
-				end
+			if instance ~= realInstance or repeating.doesPartHaveAnyRepeatSettings(realInstance) then
+				initialProps.cframes[instance] = instance.CFrame
+				initialProps.sizes[instance] = instance.Size
+				continue
 			end
 
 			-- If part has any children, we'll want to trigger an update if its
@@ -121,7 +119,7 @@ local function updateCFrame(part: BasePart, previousCFrame: CFrame): boolean
 	return false
 end
 
-local function updateSize(part: BasePart, previousSize: Vector3, repeatUpdates: { BasePart })
+local function updateSize(part: BasePart, previousSize: Vector3, repeatUpdates: { BasePart }): boolean
 	local realPart = selectionHelper.getRealInstance(part) :: BasePart
 
 	local axes: { types.AxisString } = {}
@@ -140,7 +138,10 @@ local function updateSize(part: BasePart, previousSize: Vector3, repeatUpdates: 
 		local newParentCFrame = part.CFrame
 
 		scaling.moveAndScaleChildrenRecursive(realPart, newParentSize, newParentCFrame, axes, repeatUpdates, true)
+		return true
 	end
+
+	return false
 end
 
 function changeCatcher.finishCatching()
@@ -164,7 +165,9 @@ function changeCatcher.finishCatching()
 	end
 
 	for _, part in deferredRepeatingUpdates do
-		repeating.updateRepeat(part)
+		if selectionHelper.isValidContained(part) then
+			repeating.updateRepeat(part)
+		end
 	end
 	isCatching = false
 end
@@ -215,7 +218,12 @@ function changeCatcher.initialize(plugin: Plugin)
 		local repeatUpdates = {}
 
 		if initialProps.sizes[changedInstance] then
-			updateSize(changedInstance, initialProps.sizes[changedInstance], repeatUpdates)
+			local didUpdateSize = updateSize(changedInstance, initialProps.sizes[changedInstance], repeatUpdates)
+
+			if didUpdateSize then
+				initialProps.sizes[changedInstance] = changedInstance.Size
+				initialProps.cframes[changedInstance] = changedInstance.CFrame
+			end
 		end
 
 		if initialProps.cframes[changedInstance] then
@@ -224,10 +232,14 @@ function changeCatcher.initialize(plugin: Plugin)
 				local realPart = selectionHelper.getRealInstance(changedInstance) :: BasePart
 				table.insert(repeatUpdates, realPart)
 			end
+
+			initialProps.cframes[changedInstance] = changedInstance.CFrame
 		end
 
 		for _, part in repeatUpdates do
-			repeating.updateRepeat(part)
+			if selectionHelper.isValidContained(part) then
+				repeating.updateRepeat(part)
+			end
 		end
 	end)
 
