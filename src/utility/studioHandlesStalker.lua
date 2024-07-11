@@ -50,10 +50,8 @@ function setUpHandleListener(draggerUi: Folder)
 		local isFreeDragging = outline == nil and boundingBox == nil and onTop ~= nil and snapTo ~= nil and underneath ~= nil
 
 		if isFreeDragging and not wasFreeDragging then
-			print("free dragging")
 			anyHandleMouseDownEvent:Fire()
 		elseif not isFreeDragging and wasFreeDragging then
-			print("stopped dragging ")
 			anyHandleMouseUpEvent:Fire()
 		end
 

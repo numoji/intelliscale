@@ -9,11 +9,13 @@ local types = require(source.types)
 local janitor = Janitor.new()
 local constraintSettingsChangedEvent = janitor:Add(Instance.new("BindableEvent"))
 local repeatSettingsChangedEvent = janitor:Add(Instance.new("BindableEvent"))
+local selectionSettingsChangedEvent = janitor:Add(Instance.new("BindableEvent"))
 
 local settingsHelper = {}
 
 settingsHelper.constraintSettingsChanged = constraintSettingsChangedEvent.Event
 settingsHelper.repeatSettingsChanged = repeatSettingsChangedEvent.Event
+settingsHelper.selectionSettingsChanged = selectionSettingsChangedEvent.Event
 settingsHelper.janitor = janitor
 
 type Selection = { Instance }
@@ -172,6 +174,38 @@ local function updateRepeatSettingsInvalid()
 	repeatSettingsChangedEvent:Fire(false, {}, {})
 end
 
+export type SelectionSettings = {
+	updateChildrenContinuously: boolean | Mixed,
+}
+local function updateSelectionSettingsForSelection(selection)
+	local updateChildrenContinuously
+
+	updateChildrenContinuously = selection[1]:GetAttribute("UpdateChildrenContinuously")
+
+	if #selection > 1 then
+		for i = 2, #selection do
+			local thisUpdateChildrenContinuously = selection[i]:GetAttribute("UpdateChildrenContinuously")
+			if thisUpdateChildrenContinuously ~= updateChildrenContinuously then
+				updateChildrenContinuously = "~"
+				break
+			end
+		end
+	end
+
+	return {
+		updateChildrenContinuously = updateChildrenContinuously,
+	}
+end
+
+local function updateSelectionSettingsValid(selection)
+	local settings = updateSelectionSettingsForSelection(selection)
+	selectionSettingsChangedEvent:Fire(true, settings)
+end
+
+local function updateSelectionSettingsInvalid()
+	selectionSettingsChangedEvent:Fire(false, {})
+end
+
 function settingsHelper.listenForChanges()
 	janitor:Add(selectionHelper.bindToContainedSelection(function(selection)
 		updateConstraintSettingsValid(selection)
@@ -188,6 +222,20 @@ function settingsHelper.listenForChanges()
 		end
 		updateConstraintSettingsValid(containedSelection)
 		updateRepeatSettingsValid(containedSelection)
+	end))
+
+	janitor:Add(selectionHelper.bindToContainerSelection(function(selection: Selection)
+		updateSelectionSettingsValid(selection)
+	end, function()
+		updateSelectionSettingsInvalid()
+	end))
+
+	janitor:Add(selectionHelper.bindToAnyContainerChanged(function()
+		local containerSelection = selectionHelper.getContainerSelection()
+		if #containerSelection == 0 then
+			return
+		end
+		updateSelectionSettingsValid(containerSelection)
 	end))
 end
 

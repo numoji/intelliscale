@@ -198,7 +198,9 @@ function changeCatcher.initialize(plugin: Plugin)
 	end)
 
 	selectionHelper.bindToAnyEitherChanged(function(changedInstance, selection, fauxSelection)
-		if isCatching then
+		local realInstance = selectionHelper.getRealInstance(changedInstance)
+
+		if isCatching and not realInstance:GetAttribute("UpdateChildrenContinuously") then
 			return
 		end
 

@@ -154,11 +154,11 @@ local function createValidator(validateFunction: (Instance) -> boolean)
 end
 
 local isValidContained = createValidator(function(instance: Instance): boolean
-	return instance:IsA("BasePart") and instance.Parent and instance.Parent:IsA("BasePart") and instance.Parent:GetAttribute("isContainer")
+	return instance:IsA("BasePart") and instance.Parent ~= nil and instance.Parent:IsA("BasePart")
 end)
 
 local isValidContainer = createValidator(function(instance: Instance): boolean
-	return instance:IsA("BasePart") and instance:GetAttribute("isContainer")
+	return instance:IsA("BasePart")
 end)
 
 local isValidContainedOrContainer = createValidator(function(instance: Instance): boolean
@@ -167,7 +167,7 @@ local isValidContainedOrContainer = createValidator(function(instance: Instance)
 		and instance.Parent
 		and instance.Parent:IsA("BasePart")
 		and instance.Parent:GetAttribute("isContainer")
-	) or (instance:IsA("BasePart") and instance:GetAttribute("isContainer"))
+	) or (instance:IsA("BasePart"))
 end)
 
 --stylua: ignore

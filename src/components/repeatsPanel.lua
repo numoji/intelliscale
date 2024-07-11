@@ -1,6 +1,4 @@
 --!strict
-local Selection = game:GetService("Selection")
-
 local packages = script.Parent.Parent.Parent.Packages
 local React = require(packages.React)
 local StudioComponents = require(packages.StudioComponents)
@@ -78,7 +76,7 @@ function repeatAxisSettings(props)
 
 	local settingComponents: { any } = {}
 	table.insert(settingComponents, {
-		LabelText = "Repeat Kind",
+		LabelText = string.upper(axis) .. " Repeat Kind",
 		element = StudioComponents.Dropdown,
 		props = {
 			Items = { "To Extents", "Fixed Amount" },
@@ -115,7 +113,7 @@ function repeatAxisSettings(props)
 
 	if repeats.showFixedSettings then
 		table.insert(settingComponents, {
-			LabelText = "Amount +",
+			LabelText = string.upper(axis) .. "+",
 			element = StudioComponents.NumericInput,
 			props = {
 				Size = UDim2.new(1, 0, 0, StudioComponents.Constants.DefaultInputHeight),
@@ -129,7 +127,7 @@ function repeatAxisSettings(props)
 		})
 
 		table.insert(settingComponents, {
-			LabelText = "Amount -",
+			LabelText = string.upper(axis) .. "-",
 			element = StudioComponents.NumericInput,
 			props = {
 				Size = UDim2.new(1, 0, 0, StudioComponents.Constants.DefaultInputHeight),
@@ -150,16 +148,8 @@ function repeatAxisSettings(props)
 		Size = UDim2.new(1, 0, 0, 0),
 		LayoutOrder = layoutOrder,
 	}, {
-		e(StudioComponents.Label, {
-			Text = `{string.upper(axis)} Repeat Settings`,
-			Size = UDim2.new(1, 0, 0, 24),
-			Position = UDim2.fromOffset(10, 0),
-			TextColorStyle = repeatState.disabled and Enum.StudioStyleGuideColor.DimmedText or Enum.StudioStyleGuideColor.MainText,
-			TextXAlignment = Enum.TextXAlignment.Left,
-			LayoutOrder = 0,
-		}),
 		e(labeledSettingsPanel, {
-			Position = UDim2.fromOffset(0, 24),
+			Position = UDim2.fromOffset(0, 0),
 			settingComponents = settingComponents,
 		}),
 	})
