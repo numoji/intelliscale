@@ -93,7 +93,6 @@ end
 function realTransform.setRelativeCFrame(part: BasePart, newRelativeCFrame: CFrame, parentCFrame: CFrame?)
 	local relativeCFrame = part:GetAttribute("__trueRelativeCFrame_intelliscale_internal") :: Vector3
 	if relativeCFrame then
-		print(`set relative: [{newRelativeCFrame}]`)
 		attributeHelper.setAttribute(part, "__trueRelativeCFrame_intelliscale_internal", newRelativeCFrame, true)
 	else
 		if not parentCFrame then
@@ -115,7 +114,6 @@ function realTransform.setGlobalCFrame(part: BasePart, newGlobalCFrame: CFrame, 
 		end
 		assert(parentCFrame, "Unable to get parent cframe")
 		local newRelativeCFrame = parentCFrame:ToObjectSpace(newGlobalCFrame)
-		print(`set relative: {cf(newRelativeCFrame)} \n\tglobal: {cf(newGlobalCFrame)} \n\tparent: {cf(parentCFrame)}`)
 		attributeHelper.setAttribute(part, "__trueRelativeCFrame_intelliscale_internal", newRelativeCFrame, true)
 	else
 		part.CFrame = newGlobalCFrame

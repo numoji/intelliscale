@@ -10,11 +10,6 @@ function attributeHelper.setAttribute(instance: Instance, attribute: string, val
 	else
 		instance:SetAttribute("_intelliscale_lastChangeBy", nil)
 	end
-
-	-- if shouldPrint then
-	-- 	local tb = debug.traceback()
-	-- 	print(`{instance.Name}.{attribute} -> {value}`, tb)
-	-- end
 end
 
 function attributeHelper.wasLastChangedByMe(instance: Instance)

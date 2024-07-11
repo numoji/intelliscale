@@ -41,11 +41,9 @@ function setUpHandleListener(draggerUi: Folder)
 
 	draggerUiJanitor:Add(draggerUi.ChildAdded:Connect(function(container: Instance)
 		if container.Name == "DraggerUI" then
-			print("DOWN!")
 			anyHandleMouseDownEvent:Fire()
 			local containerJanitor = Janitor.new()
 			containerJanitor:Add(function()
-				print("UP!")
 				anyHandleMouseUpEvent:Fire()
 			end)
 			bindRemovingToJanitor(container, containerJanitor, draggerUiJanitor)

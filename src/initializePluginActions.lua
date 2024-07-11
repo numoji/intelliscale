@@ -13,7 +13,7 @@ local function initializePluginActions(plugin)
 	local toggleHandlesAction =
 		plugin:CreatePluginAction("IntelliscaleToggleHandles", "Intelliscale: Toggle handles", "Toggles intelliscale scaling handles")
 
-	janitor:Add(toggleHandlesAction.Triggered:Connect(scaling.toggleHandleVisibility))
+	janitor:Add(toggleHandlesAction.Triggered:Connect(selectionHelper.toggleUseFauxSelection))
 
 	local selectContainerAction = plugin:CreatePluginAction(
 		"intelliscaleSelectContainer",

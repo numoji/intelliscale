@@ -32,7 +32,8 @@ end
 local function createSelectionBox(color, parent)
 	local selectionBox = janitor:Add(Instance.new("SelectionBox"))
 	selectionBox.LineThickness = 0.02
-	selectionBox.SurfaceTransparency = 1
+	selectionBox.SurfaceTransparency = 0.95
+	selectionBox.SurfaceColor3 = color
 	selectionBox.Parent = parent
 	selectionBox.Color3 = color
 	selectionBox.Visible = true
@@ -143,8 +144,8 @@ function selectionDisplay.initializeHighlightContainer()
 	screenGui.Parent = CoreGui
 	screenGui.Name = "IntelliscaleConstraintVisualization"
 
-	local containerSelectionBox = createSelectionBox(Color3.fromHex("#f69fd6"), screenGui)
-	local repeatsFromSelectionBox = createSelectionBox(Color3.fromHex("#6fff4f"), screenGui)
+	local containerSelectionBox = createSelectionBox(Color3.fromHex("#f34bff"), screenGui)
+	local fauxSelectionBox = createSelectionBox(Color3.fromHex("#6fff4f"), screenGui)
 
 	local xCylinderA = createCylinderHandle(Color3.fromRGB(255, 90, 0), screenGui)
 	local xCylinderB = createCylinderHandle(Color3.fromRGB(255, 90, 0), screenGui)
@@ -153,25 +154,32 @@ function selectionDisplay.initializeHighlightContainer()
 	local zCylinderA = createCylinderHandle(Color3.fromRGB(90, 0, 255), screenGui)
 	local zCylinderB = createCylinderHandle(Color3.fromRGB(90, 0, 255), screenGui)
 
-	local function update(selectedPart: BasePart)
-		containerSelectionBox.Adornee = selectedPart.Parent
-
-		local repeatsFrom = selectedPart:FindFirstChild("RepeatsFrom") :: ObjectValue
-
-		if repeatsFrom and repeatsFrom:IsA("ObjectValue") then
-			repeatsFromSelectionBox.Adornee = repeatsFrom.Value
+	local function update(selectedPart: BasePart, fauxPart: BasePart?)
+		if selectionHelper.isValidContained(selectedPart) then
+			containerSelectionBox.Adornee = selectedPart.Parent
+			updateCylindersByAxis("x", selectedPart, xCylinderA, xCylinderB)
+			updateCylindersByAxis("y", selectedPart, yCylinderA, yCylinderB)
+			updateCylindersByAxis("z", selectedPart, zCylinderA, zCylinderB)
 		else
-			repeatsFromSelectionBox.Adornee = nil
+			xCylinderA.Adornee = nil
+			xCylinderB.Adornee = nil
+			yCylinderA.Adornee = nil
+			yCylinderB.Adornee = nil
+			zCylinderA.Adornee = nil
+			zCylinderB.Adornee = nil
+			containerSelectionBox.Adornee = nil
 		end
 
-		updateCylindersByAxis("x", selectedPart, xCylinderA, xCylinderB)
-		updateCylindersByAxis("y", selectedPart, yCylinderA, yCylinderB)
-		updateCylindersByAxis("z", selectedPart, zCylinderA, zCylinderB)
+		if fauxPart and fauxPart ~= selectedPart then
+			fauxSelectionBox.Adornee = fauxPart
+		else
+			fauxSelectionBox.Adornee = nil
+		end
 	end
 
-	selectionHelper.bindToSingleContainedSelection(update, function()
+	selectionHelper.bindToSingleEitherSelection(update, function()
 		containerSelectionBox.Adornee = nil
-		repeatsFromSelectionBox.Adornee = nil
+		fauxSelectionBox.Adornee = nil
 		xCylinderA.Adornee = nil
 		xCylinderB.Adornee = nil
 		yCylinderA.Adornee = nil
@@ -179,7 +187,10 @@ function selectionDisplay.initializeHighlightContainer()
 		zCylinderA.Adornee = nil
 		zCylinderB.Adornee = nil
 	end)
-	selectionHelper.bindToSingleContainedChanged(update)
+
+	selectionHelper.bindToSingleEitherChanged(function(changedInstance: Instance, selectedPart: BasePart, fauxPart: BasePart?)
+		update(selectedPart, fauxPart)
+	end)
 
 	return janitor
 end

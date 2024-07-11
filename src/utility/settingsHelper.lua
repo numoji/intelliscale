@@ -16,6 +16,8 @@ settingsHelper.constraintSettingsChanged = constraintSettingsChangedEvent.Event
 settingsHelper.repeatSettingsChanged = repeatSettingsChangedEvent.Event
 settingsHelper.janitor = janitor
 
+type Selection = { Instance }
+
 type Mixed = "~"
 
 type XConstraint = "Left" | "Right" | "Left and Right" | "Center" | "Scale" | Mixed
@@ -36,8 +38,12 @@ export type ConstraintDefaultOverrides = {
 	z: OverrideString?,
 }
 
-local function updateConstraintSettingForSelection(axis: types.AxisString, selection: { BasePart }): (string?, OverrideString?)
+local function updateConstraintSettingForSelection(axis: types.AxisString, selection: Selection): (string?, OverrideString?)
 	local attributeName = axis .. "Constraint"
+
+	if #selection == 0 then
+		return
+	end
 
 	if #selection == 1 then
 		return selection[1]:GetAttribute(attributeName) :: string, nil
@@ -117,16 +123,16 @@ settingsHelper.getRepeatSettings = function(instance: BasePart | Folder, axis: t
 	end
 end
 
-local function updateRepeatSettingForSelection(axis: types.AxisString, selection: { BasePart }): (RepeatSettings, RepeatDefaultOverrides)
+local function updateRepeatSettingForSelection(axis: types.AxisString, selection: Selection): (RepeatSettings, RepeatDefaultOverrides)
 	if #selection == 1 then
-		local repeatSettings = settingsHelper.getRepeatSettings(selection[1], axis)
+		local repeatSettings = settingsHelper.getRepeatSettings(selection[1] :: BasePart | Folder, axis)
 		return repeatSettings, {}
 	else
-		local repeatSettings = settingsHelper.getRepeatSettings(selection[1], axis)
+		local repeatSettings = settingsHelper.getRepeatSettings(selection[1] :: BasePart | Folder, axis)
 		local defaultOverrides = {}
 
 		for i = 2, #selection do
-			local compareSettings = settingsHelper.getRepeatSettings(selection[i], axis)
+			local compareSettings = settingsHelper.getRepeatSettings(selection[i] :: BasePart | Folder, axis)
 
 			for settingName, settingValue in compareSettings do
 				if repeatSettings[settingName] and repeatSettings[settingName] ~= settingValue then
@@ -177,6 +183,9 @@ function settingsHelper.listenForChanges()
 
 	janitor:Add(selectionHelper.bindToAnyContainedChanged(function()
 		local containedSelection = selectionHelper.getContainedSelection()
+		if #containedSelection == 0 then
+			return
+		end
 		updateConstraintSettingsValid(containedSelection)
 		updateRepeatSettingsValid(containedSelection)
 	end))

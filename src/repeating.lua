@@ -144,23 +144,20 @@ end
 
 -- Returns position relative to parent in the axis, size in the axis, and the range of repeats in the axis
 local function getSizeAndPositionAndRepeatRangeInAxis(
-	sourcePartSize: Vector3,
-	sourcePartRelativeCFrame: CFrame,
+	size: Vector3,
+	relativeCFrame: CFrame,
 	parentSize: Vector3,
 	axis: Vector3,
 	axisRepeatSettings: settingsHelper.RepeatSettings
 ): (Vector3, Vector3, number, number)
-	local localAxis = sourcePartRelativeCFrame:VectorToObjectSpace(axis)
-	local sizeInAxis = localAxis:Dot(sourcePartSize)
-	local relativePositionInAxis = axis:Dot(sourcePartRelativeCFrame.Position)
-
-	local parentCFrame = sourcePartRelativeCFrame:Inverse()
-
-	local parentLocalAxis = parentCFrame:VectorToObjectSpace(axis)
-	local parentSizeInAxis = parentLocalAxis:Dot(parentSize)
+	local positionInAxis = relativeCFrame.Position:Dot(axis)
+	local relativeAxis = relativeCFrame:VectorToObjectSpace(axis)
+	local sizeInAxis = math.abs(size:Dot(relativeAxis))
+	local sign = math.sign(size:Dot(relativeAxis))
+	local parentSizeInAxis = parentSize:Dot(axis)
 
 	if parentSizeInAxis < sizeInAxis then
-		return sizeInAxis * localAxis, relativePositionInAxis * axis, 0, 0
+		return sizeInAxis * relativeAxis * sign, positionInAxis * axis, 0, 0
 	end
 
 	local parentEdgePos = parentSizeInAxis / 2
@@ -169,14 +166,14 @@ local function getSizeAndPositionAndRepeatRangeInAxis(
 		local halfSize = sizeInAxis / 2
 		local rangeMin, rangeMax
 		if axisRepeatSettings.repeatKind == "To Extents" then
-			rangeMax = (parentEdgePos - halfSize - relativePositionInAxis) // sizeInAxis
-			rangeMin = -((parentEdgePos - halfSize + relativePositionInAxis) // sizeInAxis)
+			rangeMax = (parentEdgePos - halfSize - positionInAxis) // sizeInAxis
+			rangeMin = -((parentEdgePos - halfSize + positionInAxis) // sizeInAxis)
 		else
 			rangeMax = (axisRepeatSettings.repeatAmountPositive :: number) or 0
 			rangeMin = (axisRepeatSettings.repeatAmountNegative :: number) or 0
 		end
 
-		return sizeInAxis * localAxis, relativePositionInAxis * axis, rangeMax, rangeMin
+		return sizeInAxis * relativeAxis * sign, positionInAxis * axis, rangeMax, rangeMin
 	end
 
 	local repeatsInAxis = parentSizeInAxis // sizeInAxis
@@ -184,12 +181,12 @@ local function getSizeAndPositionAndRepeatRangeInAxis(
 	local halfSize = sizeInAxis / 2
 
 	local roundOffset = repeatsInAxis % 2 == 0 and sizeInAxis / 2 or 0
-	local roundedPositionInAxis = mathUtil.round(relativePositionInAxis - roundOffset, sizeInAxis) + roundOffset
+	local roundedPositionInAxis = mathUtil.round(positionInAxis - roundOffset, sizeInAxis) + roundOffset
 
 	local rangeMax = mathUtil.round((parentEdgePos - halfSize - roundedPositionInAxis) / sizeInAxis, 1)
 	local rangeMin = mathUtil.round((halfSize - parentEdgePos - roundedPositionInAxis) / sizeInAxis, 1)
 
-	return sizeInAxis * localAxis, roundedPositionInAxis * axis, rangeMax, rangeMin
+	return sizeInAxis * relativeAxis * sign, roundedPositionInAxis * axis, rangeMax, rangeMin
 end
 
 local function getSizeAndPositionAndRepeatRanges(
@@ -210,7 +207,7 @@ local function getSizeAndPositionAndRepeatRanges(
 	local size = xSize + ySize + zSize
 	local position = xPosition + yPosition + zPosition
 
-	local relativeCFrame = CFrame.new(position) * parent.CFrame.Rotation:ToObjectSpace(sourcePart.CFrame.Rotation)
+	local relativeCFrame = CFrame.new(position) * trueRelativeCFrame.Rotation
 
 	local repeatRanges = {
 		x = { min = xRangeMin, max = xRangeMax },
@@ -311,9 +308,6 @@ local function getPrevAndNewRepeatVariablesIfDifferent(sourcePart: BasePart): (b
 		return false
 	end
 
-	-- local prevRanges = prevRepeatVariables.repeatRanges
-	local newRanges = newRepeatVariables.repeatRanges
-
 	local usesStretchToFit = usesStretchToFit(newRepeatVariables.combinedSettings.x)
 		or usesStretchToFit(newRepeatVariables.combinedSettings.y)
 		or usesStretchToFit(newRepeatVariables.combinedSettings.z)
@@ -368,7 +362,7 @@ local function flattenInstanceHierarchyRecursive<InstanceType>(instance: Instanc
 	end
 
 	if instance:IsA("BasePart") then
-		-- instance.CollisionGroup = "IntelliscaleUnselectable"
+		instance.CollisionGroup = "IntelliscaleUnselectable"
 	end
 
 	return instance
@@ -401,8 +395,8 @@ local function reconcileRepeats(
 			(flatSource :: Model).PrimaryPart = flattenInstanceHierarchyRecursive(sourcePart:Clone(), flatSource)
 		end
 	else
-		flatSource = sourcePart:Clone()
-		-- (flatSource :: BasePart).CollisionGroup = "IntelliscaleUnselectable"
+		flatSource = sourcePart:Clone();
+		(flatSource :: BasePart).CollisionGroup = "IntelliscaleUnselectable"
 		if #flatSource:GetChildren() > 0 then
 			flatSource:GetChildren()[1]:Destroy()
 		end
@@ -431,13 +425,17 @@ local function reconcileRepeats(
 		end
 	end
 
+	local size = sourcePart.Size
+
 	local xAxis = relativeCFrame:VectorToObjectSpace(Vector3.xAxis)
 	local yAxis = relativeCFrame:VectorToObjectSpace(Vector3.yAxis)
-	local zAxis = relativeCFrame:VectorToObjectSpace(-Vector3.zAxis)
+	local zAxis = relativeCFrame:VectorToObjectSpace(Vector3.zAxis)
 
-	local xOffset = xAxis:Dot(sourcePart.Size) * xAxis
-	local yOffset = yAxis:Dot(sourcePart.Size) * yAxis
-	local zOffset = zAxis:Dot(sourcePart.Size) * zAxis
+	local xOffset = math.abs(size:Dot(xAxis)) * xAxis
+	local yOffset = math.abs(size:Dot(yAxis)) * yAxis
+	local zOffset = math.abs(size:Dot(zAxis)) * zAxis
+
+	local baseCf = CFrame.new(sourcePart.Position) * parent.CFrame.Rotation
 
 	for x = newXMin, newXMax do
 		for y = newYMin, newYMax do
@@ -462,7 +460,7 @@ local function reconcileRepeats(
 				repeatInstance.Name = repeatName
 				repeatInstance.Parent = repeatsFolder
 
-				local cf = sourcePart.CFrame * CFrame.new(xOffset * x + yOffset * y + zOffset * z)
+				local cf = sourcePart.CFrame * CFrame.new(xOffset * x + yOffset * y + zOffset * z) --* relativeCFrame.Rotation
 				if repeatInstance:IsA("BasePart") then
 					repeatInstance.CFrame = cf
 				elseif repeatInstance:IsA("Model") then
@@ -520,7 +518,6 @@ function repeating.updateRepeat(sourcePart: BasePart)
 			table.insert(axes, "z")
 		end
 
-		print("--> doing deferred scaling")
 		scaling.moveAndScaleChildrenRecursive(sourcePart, new.size, newCFrame, axes, changedList)
 
 		for _, changedPart in changedList do
@@ -528,8 +525,7 @@ function repeating.updateRepeat(sourcePart: BasePart)
 		end
 	elseif shouldUpdateRotation or shouldUpdatePosition then
 		local deltaCFrame = partRelativeCFrame:ToObjectSpace(newRelativeCFrame)
-		print("--> doing deferred moving")
-		scaling.cframeChildrenRecursive(sourcePart, deltaCFrame)
+		scaling.cframeChildrenRecursive(sourcePart, deltaCFrame, false, true)
 	end
 
 	if shouldUpdateRanges or didSizeChange or didRotationChange then
@@ -550,7 +546,7 @@ function repeating.initializeRepeating()
 
 		changeHistoryHelper.recordUndoChange(function()
 			for _, contained in containedSelection do
-				repeating.updateRepeat(contained)
+				repeating.updateRepeat(contained :: BasePart)
 			end
 		end)
 
