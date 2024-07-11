@@ -39,16 +39,47 @@ end
 function setUpHandleListener(draggerUi: Folder)
 	local draggerUiJanitor = Janitor.new()
 
-	draggerUiJanitor:Add(draggerUi.ChildAdded:Connect(function(container: Instance)
-		if container.Name == "DraggerUI" then
+	local wasFreeDragging = false
+	local function reconcileIsFreeDragging()
+		local outline = draggerUi:FindFirstChild("Outline")
+		local boundingBox = draggerUi:FindFirstChild("BoundingBox")
+		local onTop = draggerUi:FindFirstChild("OnTop")
+		local snapTo = draggerUi:FindFirstChild("SnapTo")
+		local underneath = draggerUi:FindFirstChild("Underneath")
+
+		local isFreeDragging = outline == nil and boundingBox == nil and onTop ~= nil and snapTo ~= nil and underneath ~= nil
+
+		if isFreeDragging and not wasFreeDragging then
+			print("free dragging")
+			anyHandleMouseDownEvent:Fire()
+		elseif not isFreeDragging and wasFreeDragging then
+			print("stopped dragging ")
+			anyHandleMouseUpEvent:Fire()
+		end
+
+		wasFreeDragging = isFreeDragging
+	end
+
+	draggerUiJanitor:Add(function()
+		if wasFreeDragging then
+			anyHandleMouseUpEvent:Fire()
+		end
+	end)
+
+	draggerUiJanitor:Add(draggerUi.ChildAdded:Connect(function(child: Instance)
+		if child.Name == "DraggerUI" then
 			anyHandleMouseDownEvent:Fire()
 			local containerJanitor = Janitor.new()
 			containerJanitor:Add(function()
 				anyHandleMouseUpEvent:Fire()
 			end)
-			bindRemovingToJanitor(container, containerJanitor, draggerUiJanitor)
+			bindRemovingToJanitor(child, containerJanitor, draggerUiJanitor)
 		end
+
+		reconcileIsFreeDragging()
 	end))
+
+	draggerUiJanitor:Add(draggerUi.ChildRemoved:Connect(reconcileIsFreeDragging))
 
 	bindRemovingToJanitor(draggerUi, draggerUiJanitor, janitor)
 
