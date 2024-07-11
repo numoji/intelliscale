@@ -281,8 +281,14 @@ local function callAllInvalid()
 	callInArray(container.single.invalid)
 end
 
-local function getRealInstance(instance: Instance): Instance
+function selectionHelper.getRealInstance(instance: Instance | BasePart): Instance | BasePart
 	return partByFauxPart[instance :: BasePart] or instance
+end
+
+local function shouldFaux(part): boolean
+	return realTransform.hasTransform(part)
+		or part:FindFirstChildWhichIsA("BasePart") ~= nil
+		or part:FindFirstChildWhichIsA("Folder") ~= nil
 end
 
 local function getSelectionAndFauxSelection(): (Selection, Selection, boolean)
@@ -293,7 +299,7 @@ local function getSelectionAndFauxSelection(): (Selection, Selection, boolean)
 	local shouldSelectFauxParts = false
 
 	for _, instance in Selection:Get() do
-		local realInstance = getRealInstance(instance)
+		local realInstance = selectionHelper.getRealInstance(instance)
 		table.insert(selection, realInstance :: BasePart)
 
 		if not (isValidContainedOrContainer(realInstance) and instance:IsA("BasePart") and realInstance:IsA("BasePart")) then
@@ -307,11 +313,12 @@ local function getSelectionAndFauxSelection(): (Selection, Selection, boolean)
 		-- If the selected part is a faux part, then add it to the faux
 		-- selection. If the selected part is a real part, but it has true size
 		-- & true relative cframe attributes, then create a faux part for it.
+
 		if realPart ~= part then
 			table.insert(fauxSelection, part)
 			currentSelectedFauxPartsSet[part] = realPart
 			continue
-		elseif realTransform.hasTransform(part) then
+		elseif shouldFaux(part) then
 			shouldSelectFauxParts = true
 
 			local fauxPart = Instance.new("Part")
@@ -349,13 +356,13 @@ function updateSelection()
 	end
 
 	local selection, fauxSelection, shouldSelectFauxParts = getSelectionAndFauxSelection()
-	-- if shouldSelectFauxParts then
-	-- 	isChangingSelection = true
-	-- 	Selection:Set(fauxSelection)
-	-- 	task.defer(function()
-	-- 		isChangingSelection = false
-	-- 	end)
-	-- end
+	if shouldSelectFauxParts then
+		isChangingSelection = true
+		Selection:Set(fauxSelection)
+		task.defer(function()
+			isChangingSelection = false
+		end)
+	end
 
 	propertyAttributeJanitor:Cleanup()
 
@@ -427,7 +434,7 @@ function updateSelection()
 			task.defer(function()
 				local shouldChangeSelection = false
 				for i, instance in fauxSelection do
-					local realInstance = getRealInstance(instance)
+					local realInstance = selectionHelper.getRealInstance(instance)
 					if instance == realInstance then
 						continue
 					end
@@ -467,10 +474,10 @@ selectionHelper.jantior:Add(Selection.SelectionChanged:Connect(updateSelection))
 
 local function createSelectionGetter(validator)
 	return function()
-		local selection = getSelectionAndFauxSelection()
+		local selection, fauxSelection = getSelectionAndFauxSelection()
 
 		if #selection == 1 and validator(selection[1]) then
-			return selection
+			return selection, fauxSelection
 		elseif #selection > 1 then
 			local isValidSelection = true
 
@@ -482,11 +489,11 @@ local function createSelectionGetter(validator)
 			end
 
 			if isValidSelection then
-				return selection
+				return selection, fauxSelection
 			end
 		end
 
-		return {}
+		return {}, {}
 	end
 end
 

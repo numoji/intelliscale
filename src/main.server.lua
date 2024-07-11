@@ -6,6 +6,7 @@ local ReactRoblox = require(packages.ReactRoblox)
 local StudioComponents = require(packages.StudioComponents)
 
 local source = script.Parent
+local changeCatcher = require(source.changeCatcher)
 local containerHelper = require(source.utility.containerHelper)
 local initializePluginActions = require(source.initializePluginActions)
 local repeating = require(source.repeating)
@@ -13,11 +14,13 @@ local scaling = require(source.scaling)
 local selectionDisplay = require(source.selectionDisplay)
 local selectionHelper = require(source.utility.selectionHelper)
 local settingsHelper = require(source.utility.settingsHelper)
+local studioHandlesStalker = require(source.utility.studioHandlesStalker)
 
 local widgetApp = require(source.components.widgetApp)
 
 local janitor = Janitor.new()
 
+janitor:Add(changeCatcher.initialize(plugin))
 janitor:Add(containerHelper.registerCollisionGroup())
 janitor:Add(initializePluginActions(plugin))
 janitor:Add(repeating.initializeRepeating())
@@ -25,6 +28,7 @@ janitor:Add(scaling.initializeHandles(plugin))
 janitor:Add(selectionDisplay.initializeHighlightContainer())
 janitor:Add(selectionHelper.jantior)
 janitor:Add(settingsHelper.stopListening)
+janitor:Add(studioHandlesStalker.initialize())
 
 local toolbar = plugin:CreateToolbar("Intelliscale")
 local toggleWidgetButton = toolbar:CreateButton("Intelliscale", "Toggle widget", "")

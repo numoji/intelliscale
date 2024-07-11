@@ -8,8 +8,8 @@ local epsilon = 1e-5
 local source = script.Parent
 local changeHistoryHelper = require(source.utility.changeHistoryHelper)
 local geometryHelper = require(source.utility.geometryHelper)
+local mathUtil = require(source.utility.mathUtil)
 local realTransform = require(source.utility.realTransform)
-local round = require(source.utility.round)
 local selectionHelper = require(source.utility.selectionHelper)
 local types = require(source.types)
 
@@ -98,14 +98,14 @@ end
 function scaling.cframeChildrenRecursive(
 	part: BasePart,
 	deltaCFrame: CFrame?,
-	shouldNotMoveStretchRepeat: boolean?,
+	shouldWriteToAttribute: boolean?,
 	shouldMoveRepeats: boolean?,
 	newParentCFrame: CFrame?,
 	parentCFrame: CFrame?
 )
 	local currentCFrame = part.CFrame
 	local shouldUseAttribute = false
-	if shouldNotMoveStretchRepeat and selectionHelper.isValidContained(part) and realTransform.hasCFrame(part) then
+	if shouldWriteToAttribute and selectionHelper.isValidContained(part) and realTransform.hasCFrame(part) then
 		currentCFrame = realTransform.getGlobalCFrame(part, parentCFrame)
 		shouldUseAttribute = true
 	end
@@ -239,7 +239,7 @@ function scaling.initializeHandles(plugin)
 	scalingHandles.MouseDrag:Connect(function(face: Enum.NormalId, distance: number)
 		local scalingPart = scalingHandles.Adornee :: BasePart
 
-		local newSize = beginningSize + round(distance, plugin.GridSize)
+		local newSize = beginningSize + mathUtil.round(distance, plugin.GridSize)
 		if newSize == currentSize or newSize < plugin.GridSize then
 			return
 		end
@@ -251,20 +251,13 @@ function scaling.initializeHandles(plugin)
 		local newParentCFrame = scalingPart.CFrame * CFrame.new(axis * deltaSize / 2)
 		local axisName: types.AxisString = geometryHelper.axisNameByNormalIdMap[face]
 
-		local relativeCFrameOrSizeChangedList = { scalingPart }
+		local changedList = { scalingPart }
 
 		changeHistoryHelper.recordUndoChange(function()
-			scaling.moveAndScaleChildrenRecursive(
-				scalingPart,
-				newParentSize,
-				newParentCFrame,
-				{ axisName },
-				relativeCFrameOrSizeChangedList,
-				true
-			)
+			scaling.moveAndScaleChildrenRecursive(scalingPart, newParentSize, newParentCFrame, { axisName }, changedList, true)
 		end)
 
-		partScaledWithHandlesEvent:Fire(relativeCFrameOrSizeChangedList)
+		partScaledWithHandlesEvent:Fire(changedList)
 
 		currentSize = newSize
 	end)

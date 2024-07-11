@@ -2,13 +2,13 @@
 local packages = script.Parent.Parent.Packages
 local Janitor = require(packages.Janitor)
 
-local epsilon = 1e-4
+local epsilon = 1e-5
 
 local source = script.Parent
 local attributeHelper = require(source.utility.attributeHelper)
 local changeHistoryHelper = require(source.utility.changeHistoryHelper)
+local mathUtil = require(source.utility.mathUtil)
 local realTransform = require(source.utility.realTransform)
-local round = require(source.utility.round)
 local scaling = require(source.scaling)
 local selectionHelper = require(source.utility.selectionHelper)
 local settingsHelper = require(source.utility.settingsHelper)
@@ -100,18 +100,19 @@ local function getCachedRepeatVariables(sourcePart: BasePart): RepeatVariables
 	}
 end
 
-local function cframeFuzzyEq(a: CFrame, b: CFrame): boolean
-	return a.Position:FuzzyEq(b.Position, epsilon)
-		and a.LookVector:FuzzyEq(b.LookVector, epsilon)
-		and a.UpVector:FuzzyEq(b.UpVector, epsilon)
-		and a.RightVector:FuzzyEq(b.RightVector, epsilon)
+function repeating.doesPartHaveAnyRepeatSettings(sourcePart: BasePart)
+	local xRepeatSettings = settingsHelper.getRepeatSettings(sourcePart, "x")
+	local yRepeatSettings = settingsHelper.getRepeatSettings(sourcePart, "y")
+	local zRepeatSettings = settingsHelper.getRepeatSettings(sourcePart, "z")
+
+	return xRepeatSettings.repeatKind ~= nil or yRepeatSettings.repeatKind ~= nil or zRepeatSettings.repeatKind ~= nil
 end
 
 local function deepEquals(a: any, b: any): boolean
 	if typeof(a) == typeof(b) then
 		if typeof(a) == "Vector3" and a:FuzzyEq(b, epsilon) then
 			return true
-		elseif typeof(a) == "CFrame" and cframeFuzzyEq(a, b) then
+		elseif typeof(a) == "CFrame" and mathUtil.cframeFuzzyEq(a, b) then
 			return true
 		elseif a == b then
 			return true
@@ -135,44 +136,6 @@ local function deepEquals(a: any, b: any): boolean
 	end
 
 	return true
-end
-
-local removed = "__REMOVED__"
-local function deepDifference(a: any, b: any): any
-	if typeof(a) == typeof(b) then
-		if typeof(a) == "Vector3" and a:FuzzyEq(b, epsilon) then
-			return nil
-		elseif typeof(a) == "CFrame" and cframeFuzzyEq(a, b) then
-			return nil
-		elseif a == b then
-			return nil
-		end
-	end
-
-	if type(a) ~= "table" or type(b) ~= "table" then
-		return b
-	end
-
-	local difference = {}
-	for key, value in a do
-		local bValue = b[key]
-		if bValue == nil then
-			difference[key] = removed
-		else
-			local subDifference = deepDifference(value, bValue)
-			if subDifference ~= nil then
-				difference[key] = subDifference
-			end
-		end
-	end
-
-	for key, value in pairs(b) do
-		if a[key] == nil then
-			difference[key] = value
-		end
-	end
-
-	return next(difference) and difference or nil
 end
 
 local function usesStretchToFit(axisSettings)
@@ -221,10 +184,10 @@ local function getSizeAndPositionAndRepeatRangeInAxis(
 	local halfSize = sizeInAxis / 2
 
 	local roundOffset = repeatsInAxis % 2 == 0 and sizeInAxis / 2 or 0
-	local roundedPositionInAxis = round(relativePositionInAxis - roundOffset, sizeInAxis) + roundOffset
+	local roundedPositionInAxis = mathUtil.round(relativePositionInAxis - roundOffset, sizeInAxis) + roundOffset
 
-	local rangeMax = round((parentEdgePos - halfSize - roundedPositionInAxis) / sizeInAxis, 1)
-	local rangeMin = round((halfSize - parentEdgePos - roundedPositionInAxis) / sizeInAxis, 1)
+	local rangeMax = mathUtil.round((parentEdgePos - halfSize - roundedPositionInAxis) / sizeInAxis, 1)
+	local rangeMin = mathUtil.round((halfSize - parentEdgePos - roundedPositionInAxis) / sizeInAxis, 1)
 
 	return sizeInAxis * localAxis, roundedPositionInAxis * axis, rangeMax, rangeMin
 end
@@ -510,7 +473,7 @@ local function reconcileRepeats(
 	end
 end
 
-function updateRepeat(sourcePart: BasePart)
+function repeating.updateRepeat(sourcePart: BasePart)
 	if not attributeHelper.wasLastChangedByMe(sourcePart) then
 		return
 	end
@@ -527,8 +490,8 @@ function updateRepeat(sourcePart: BasePart)
 	local prevRelativeCFrame = prev.relativeCFrame :: CFrame
 	local newRelativeCFrame = new.relativeCFrame :: CFrame
 	local partRelativeCFrame = parent.CFrame:ToObjectSpace(sourcePart.CFrame)
-	local shouldUpdateRotation = not cframeFuzzyEq(newRelativeCFrame.Rotation, partRelativeCFrame.Rotation)
-	local didRotationChange = shouldUpdateRotation or not cframeFuzzyEq(newRelativeCFrame.Rotation, prevRelativeCFrame.Rotation)
+	local shouldUpdateRotation = not mathUtil.cframeFuzzyEq(newRelativeCFrame.Rotation, partRelativeCFrame.Rotation)
+	local didRotationChange = shouldUpdateRotation or not mathUtil.cframeFuzzyEq(newRelativeCFrame.Rotation, prevRelativeCFrame.Rotation)
 
 	local shouldUpdatePosition = not newRelativeCFrame.Position:FuzzyEq(partRelativeCFrame.Position, epsilon)
 
@@ -561,7 +524,7 @@ function updateRepeat(sourcePart: BasePart)
 		scaling.moveAndScaleChildrenRecursive(sourcePart, new.size, newCFrame, axes, changedList)
 
 		for _, changedPart in changedList do
-			updateRepeat(changedPart)
+			repeating.updateRepeat(changedPart)
 		end
 	elseif shouldUpdateRotation or shouldUpdatePosition then
 		local deltaCFrame = partRelativeCFrame:ToObjectSpace(newRelativeCFrame)
@@ -587,7 +550,7 @@ function repeating.initializeRepeating()
 
 		changeHistoryHelper.recordUndoChange(function()
 			for _, contained in containedSelection do
-				updateRepeat(contained)
+				repeating.updateRepeat(contained)
 			end
 		end)
 
@@ -600,8 +563,7 @@ function repeating.initializeRepeating()
 		changeHistoryHelper.recordUndoChange(function()
 			for _, part in updatedParts do
 				if selectionHelper.isValidContained(part) then
-					print(`----- handling deferred update for {part} ------`)
-					updateRepeat(part)
+					repeating.updateRepeat(part)
 				end
 			end
 		end)
