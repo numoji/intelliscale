@@ -46,14 +46,14 @@ local scaleFunctionsMap: ScaleFunctionsMap = {
 	MinMax = function(axisEnum, partToScale, newParentSize)
 		local axis = geometryHelper.axisByEnum[axisEnum]
 
-		local positionInAxis, sizeInAxis = geometryHelper.getPositionAndSizeInParentAxis(axis, partToScale)
+		local positionInAxis, sizeInAxis, relativeAxis, sign = geometryHelper.getPositionAndSizeInParentAxis(axis, partToScale)
 
 		local maxPartEdge = positionInAxis + sizeInAxis / 2
 		local minPartEdge = positionInAxis - sizeInAxis / 2
 		local partSize = maxPartEdge - minPartEdge
 		local partCenter = (maxPartEdge + minPartEdge) / 2
 
-		local edgeDeltaPosition = getDeltaPositionFromEdgeConstraint(axisEnum, partToScale, newParentSize)
+		local edgeDeltaPosition = sign * getDeltaPositionFromEdgeConstraint(axisEnum, partToScale, newParentSize)
 		local newMaxPartEdge = maxPartEdge + edgeDeltaPosition
 		local newMinPartEdge = minPartEdge - edgeDeltaPosition
 		local newPartSize = newMaxPartEdge - newMinPartEdge
@@ -62,7 +62,7 @@ local scaleFunctionsMap: ScaleFunctionsMap = {
 		local deltaMovement = newPartCenter - partCenter
 		local deltaSize = newPartSize - partSize
 
-		return CFrame.new(deltaMovement * axis), deltaSize * axis
+		return CFrame.new(deltaMovement * axis), deltaSize * relativeAxis
 	end,
 	Center = function()
 		return CFrame.identity, Vector3.zero
@@ -70,7 +70,7 @@ local scaleFunctionsMap: ScaleFunctionsMap = {
 	Scale = function(axisEnum, partToScale, newParentSize: Vector3)
 		local axis = geometryHelper.axisByEnum[axisEnum]
 
-		local positionInAxis, sizeInAxis = geometryHelper.getPositionAndSizeInParentAxis(axis, partToScale)
+		local positionInAxis, sizeInAxis, relativeAxis, sign = geometryHelper.getPositionAndSizeInParentAxis(axis, partToScale)
 
 		local parent = partToScale.Parent :: BasePart
 		local parentSizeScalar = newParentSize:Dot(axis) / parent.Size:Dot(axis)
@@ -81,7 +81,7 @@ local scaleFunctionsMap: ScaleFunctionsMap = {
 		local deltaMovement = newPosition - positionInAxis
 		local deltaSize = newSize - sizeInAxis
 
-		return CFrame.new(deltaMovement * axis), deltaSize * axis
+		return CFrame.new(deltaMovement * axis), deltaSize * relativeAxis
 	end,
 }
 
