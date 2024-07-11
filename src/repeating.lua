@@ -435,8 +435,6 @@ local function reconcileRepeats(
 	local yOffset = math.abs(size:Dot(yAxis)) * yAxis
 	local zOffset = math.abs(size:Dot(zAxis)) * zAxis
 
-	local baseCf = CFrame.new(sourcePart.Position) * parent.CFrame.Rotation
-
 	for x = newXMin, newXMax do
 		for y = newYMin, newYMax do
 			for z = newZMin, newZMax do

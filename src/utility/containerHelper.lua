@@ -39,7 +39,7 @@ function containerHelper.makeContainer(model)
 
 	model.Parent = nil
 
-	boundingBoxPart.CollisionGroup = "IntelliscaleUnselectable"
+	-- boundingBoxPart.CollisionGroup = "IntelliscaleUnselectable"
 	boundingBoxPart:SetAttribute("isContainer", true)
 
 	Selection:Set({ boundingBoxPart })

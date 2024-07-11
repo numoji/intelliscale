@@ -1,6 +1,4 @@
---!nonstrict
--- Has to be nonstrict cause cylinderhandle.Adornee can't be set to nil
-
+--!strict
 local CoreGui = game:GetService("CoreGui")
 local selectionDisplay = {}
 
@@ -154,19 +152,19 @@ function selectionDisplay.initializeHighlightContainer()
 	local zCylinderA = createCylinderHandle(Color3.fromRGB(90, 0, 255), screenGui)
 	local zCylinderB = createCylinderHandle(Color3.fromRGB(90, 0, 255), screenGui)
 
-	local function update(selectedPart: BasePart, fauxPart: BasePart?)
+	local function update(selectedPart: BasePart, fauxPart: BasePart)
 		if selectionHelper.isValidContained(selectedPart) then
 			containerSelectionBox.Adornee = selectedPart.Parent
 			updateCylindersByAxis("x", selectedPart, xCylinderA, xCylinderB)
 			updateCylindersByAxis("y", selectedPart, yCylinderA, yCylinderB)
 			updateCylindersByAxis("z", selectedPart, zCylinderA, zCylinderB)
 		else
-			xCylinderA.Adornee = nil
-			xCylinderB.Adornee = nil
-			yCylinderA.Adornee = nil
-			yCylinderB.Adornee = nil
-			zCylinderA.Adornee = nil
-			zCylinderB.Adornee = nil
+			xCylinderA.Adornee = nil :: any
+			xCylinderB.Adornee = nil :: any
+			yCylinderA.Adornee = nil :: any
+			yCylinderB.Adornee = nil :: any
+			zCylinderA.Adornee = nil :: any
+			zCylinderB.Adornee = nil :: any
 			containerSelectionBox.Adornee = nil
 		end
 
@@ -180,15 +178,15 @@ function selectionDisplay.initializeHighlightContainer()
 	selectionHelper.bindToSingleEitherSelection(update, function()
 		containerSelectionBox.Adornee = nil
 		fauxSelectionBox.Adornee = nil
-		xCylinderA.Adornee = nil
-		xCylinderB.Adornee = nil
-		yCylinderA.Adornee = nil
-		yCylinderB.Adornee = nil
-		zCylinderA.Adornee = nil
-		zCylinderB.Adornee = nil
+		xCylinderA.Adornee = nil :: any
+		xCylinderB.Adornee = nil :: any
+		yCylinderA.Adornee = nil :: any
+		yCylinderB.Adornee = nil :: any
+		zCylinderA.Adornee = nil :: any
+		zCylinderB.Adornee = nil :: any
 	end)
 
-	selectionHelper.bindToSingleEitherChanged(function(changedInstance: Instance, selectedPart: BasePart, fauxPart: BasePart?)
+	selectionHelper.bindToSingleEitherChanged(function(changedInstance: Instance, selectedPart: BasePart, fauxPart: BasePart)
 		update(selectedPart, fauxPart)
 	end)
 
