@@ -430,6 +430,18 @@ local function bindToAncestryOrAttributesChanged(selection: Selection, callback:
 	end
 end
 
+local function bindFauxPartTransformsToRealParts()
+	for fauxPart, part in partByFauxPart do
+		propertyAttributeJanitor:Add(part.Changed:Connect(function(propName)
+			if propName == "Size" or propName == "CFrame" then
+				local size, cframe = realTransform.getSizeAndGlobalCFrame(part)
+				fauxPart.Size = size
+				fauxPart.CFrame = cframe
+			end
+		end))
+	end
+end
+
 local cachedSelection: Selection, cachedFauxSelection: Selection
 function selectionHelper.updateSelection()
 	if isChangingSelection then
@@ -502,6 +514,8 @@ function selectionHelper.updateSelection()
 	end
 
 	if #selection > 0 then
+		bindFauxPartTransformsToRealParts()
+
 		local wasChangedThisFrame = false
 		local didCallUpdate = false
 		bindToAncestryOrAttributesChanged(selection, function()
