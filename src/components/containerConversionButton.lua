@@ -35,7 +35,7 @@ local function containerConversionButton(props)
 		return function()
 			selectionChangedConnection:Disconnect()
 		end
-	end)
+	end, {})
 
 	if selectedModel then
 		return e(StudioComponents.MainButton, {

@@ -4,6 +4,7 @@ local React = require(packages.React)
 local StudioComponents = require(packages.StudioComponents)
 
 local components = script.Parent
+local alignButtonsPanel = require(components.alignButtonsPanel)
 local constraintsPanel = require(components.constraintsPanel)
 local containerConversionButton = require(components.containerConversionButton)
 local repeatsPanel = require(components.repeatsPanel)
@@ -22,6 +23,7 @@ return function(_props)
 		e(constraintsPanel, { LayoutOrder = 1 }),
 		e(repeatsPanel, { LayoutOrder = 2 }),
 		e(selectionSettingsPanel, { LayoutOrder = 3 }),
-		e(containerConversionButton, { LayoutOrder = 4 }),
+		e(alignButtonsPanel, { LayoutOrder = 4 }),
+		e(containerConversionButton, { LayoutOrder = 5 }),
 	})
 end

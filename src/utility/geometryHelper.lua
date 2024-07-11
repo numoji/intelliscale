@@ -41,8 +41,9 @@ function geometryHelper.getPositionAndSizeInParentAxis(axis: Vector3, part: Base
 
 	local relativeAxis = relativeCFrame:VectorToObjectSpace(axis)
 	local sizeInAxis = math.abs(part.Size:Dot(relativeAxis))
+	local sign = math.sign(part.Size:Dot(relativeAxis))
 
-	return positionInAxis, sizeInAxis
+	return positionInAxis, sizeInAxis, relativeAxis, sign
 end
 
 geometryHelper.constraintMap = {

@@ -68,7 +68,7 @@ function repeatAxisSettings(props)
 		return function()
 			repeatSettingsChangedConnection:Disconnect()
 		end
-	end)
+	end, {})
 
 	local repeats = repeatState.repeatSettings
 	local defaultOverrides = repeatState.defaultOverrides

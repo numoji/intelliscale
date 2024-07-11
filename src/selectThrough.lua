@@ -28,7 +28,6 @@ end
 
 function selectThrough.initialize()
 	janitor:Add(selectionHelper.bindToAnySelection(function(selection: { Instance }, fauxSelection: { Instance })
-		print("selection changed", #selection, #fauxSelection)
 		local newSet: SelectThroughSet = {}
 
 		for _, instance in ipairs(selection) do

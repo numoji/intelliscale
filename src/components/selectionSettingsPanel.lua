@@ -56,7 +56,7 @@ local function selectionSettingsPanel(props)
 		return function()
 			selectionSettingsChangedConnection:Disconnect()
 		end
-	end)
+	end, {})
 
 	local selectionSettings = selectionSettingsState.selectionSettings
 	local disabled = selectionSettingsState.disabled
