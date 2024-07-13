@@ -1,14 +1,12 @@
 --!strict
-local packages = script.Parent.Parent.Parent.Packages
-local React = require(packages.React)
-local StudioComponents = require(packages.StudioComponents)
+local React = require(script.Parent.Parent.Parent.Packages.React)
+local StudioComponents = require(script.Parent.Parent.Parent.Packages.StudioComponents)
 
-local components = script.Parent
-local alignButtonsPanel = require(components.alignButtonsPanel)
-local constraintsPanel = require(components.constraintsPanel)
-local containerConversionButton = require(components.containerConversionButton)
-local repeatsPanel = require(components.repeatsPanel)
-local selectionSettingsPanel = require(components.selectionSettingsPanel)
+local alignButtonsPanel = require(script.Parent.alignButtonsPanel)
+local constraintsPanel = require(script.Parent.constraintsPanel)
+local containerConversionButton = require(script.Parent.containerConversionButton)
+local repeatsPanel = require(script.Parent.repeatsPanel)
+local sizeSettingsPanel = require(script.Parent.sizeSettingsPanel)
 
 local e = React.createElement
 
@@ -22,7 +20,7 @@ return function(_props)
 		}),
 		e(constraintsPanel, { LayoutOrder = 1 }),
 		e(repeatsPanel, { LayoutOrder = 2 }),
-		e(selectionSettingsPanel, { LayoutOrder = 3 }),
+		e(sizeSettingsPanel, { LayoutOrder = 3 }),
 		e(alignButtonsPanel, { LayoutOrder = 4 }),
 		e(containerConversionButton, { LayoutOrder = 5 }),
 	})

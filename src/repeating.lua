@@ -1,18 +1,17 @@
 --!strict
-local packages = script.Parent.Parent.Packages
-local Janitor = require(packages.Janitor)
+local RunService = game:GetService("RunService")
 
-local epsilon = 1e-5
+local Janitor = require(script.Parent.Parent.Packages.Janitor)
 
-local source = script.Parent
-local attributeHelper = require(source.utility.attributeHelper)
-local changeHistoryHelper = require(source.utility.changeHistoryHelper)
-local mathUtil = require(source.utility.mathUtil)
-local realTransform = require(source.utility.realTransform)
-local scaling = require(source.scaling)
-local selectionHelper = require(source.utility.selectionHelper)
-local settingsHelper = require(source.utility.settingsHelper)
-local types = require(source.types)
+local attributeHelper = require(script.Parent.utility.attributeHelper)
+local changeHistoryHelper = require(script.Parent.utility.changeHistoryHelper)
+local fuzzyDeepEquals = require(script.Parent.utility.fuzzyDeepEquals)
+local mathUtil = require(script.Parent.utility.mathUtil)
+local realTransform = require(script.Parent.utility.realTransform)
+local repeatSettings = require(script.Parent.utility.settingsHelper.repeatSettings)
+local scaling = require(script.Parent.scaling)
+local selectionHelper = require(script.Parent.utility.selectionHelper)
+local types = require(script.Parent.types)
 
 local janitor = Janitor.new()
 
@@ -20,157 +19,106 @@ local repeating = {}
 repeating.isUpdatingFromAttributeChange = false
 
 type RepeatRanges = {
-	x: { min: number, max: number },
-	y: { min: number, max: number },
-	z: { min: number, max: number },
-}
-type CombinedRepeatSettings = {
-	x: settingsHelper.RepeatSettings,
-	y: settingsHelper.RepeatSettings,
-	z: settingsHelper.RepeatSettings,
+	x: { min: number, max: number }?,
+	y: { min: number, max: number }?,
+	z: { min: number, max: number }?,
 }
 
 type RepeatVariables = {
-	size: Vector3,
-	relativeCFrame: CFrame,
-	repeatRanges: RepeatRanges,
-	combinedSettings: CombinedRepeatSettings,
-	trueRelativeCFrame: CFrame?,
-	trueSize: Vector3?,
+	displaySize: Vector3,
+	displayRelativeCFrame: CFrame,
+	repeatRanges: RepeatRanges?,
+	repeatSettings: repeatSettings.SingleSettingGroup?,
+	realRelativeCFrame: CFrame?,
+	realSize: Vector3?,
 }
 
-local function getBlankVariables(sourcePart): RepeatVariables
-	local parent = sourcePart.Parent :: BasePart
-	return {
-		combinedSettings = {
-			x = {},
-			y = {},
-			z = {},
-		},
-		repeatRanges = {
-			x = { min = 0, max = 0 },
-			y = { min = 0, max = 0 },
-			z = { min = 0, max = 0 },
-		},
-		size = sourcePart.Size,
-		relativeCFrame = parent.CFrame:ToObjectSpace(sourcePart.CFrame),
-	}
-end
+local unselectedInitialFolderParts: { [BasePart]: true } = {}
 
 local function getCachedRepeatVariables(sourcePart: BasePart): RepeatVariables
 	local repeatsFolder = sourcePart:FindFirstChild("__repeats_intelliscale_internal") :: Folder
 	if not repeatsFolder then
-		return getBlankVariables(sourcePart)
+		local parent = sourcePart.Parent :: BasePart
+		return {
+			repeatSettings = {},
+			displaySize = sourcePart.Size,
+			displayRelativeCFrame = parent.CFrame:ToObjectSpace(sourcePart.CFrame),
+		}
 	end
 
-	local xRepeatSettings = settingsHelper.getRepeatSettings(repeatsFolder, "x")
-	local yRepeatSettings = settingsHelper.getRepeatSettings(repeatsFolder, "y")
-	local zRepeatSettings = settingsHelper.getRepeatSettings(repeatsFolder, "z")
+	local repeatSettings = repeatSettings.getSettingGroup(repeatsFolder)
 
-	local trueSize = repeatsFolder:GetAttribute("trueSize") :: Vector3
-	local trueRelativeCFrame = repeatsFolder:GetAttribute("trueRelativeCFrame") :: CFrame
-	local size = repeatsFolder:GetAttribute("size") :: Vector3
-	local relativeCFrame = repeatsFolder:GetAttribute("relativeCFrame") :: CFrame
+	local realSize = repeatsFolder:GetAttribute("realSize") :: Vector3
+	local realRelativeCFrame = repeatsFolder:GetAttribute("realRelativeCFrame") :: CFrame
+	local displaySize = repeatsFolder:GetAttribute("displaySize") :: Vector3
+	local displayRelativeCFrame = repeatsFolder:GetAttribute("displayRelativeCFrame") :: CFrame
 
-	local xMin = repeatsFolder:GetAttribute("xMin") :: number
-	local xMax = repeatsFolder:GetAttribute("xMax") :: number
-	local yMin = repeatsFolder:GetAttribute("yMin") :: number
-	local yMax = repeatsFolder:GetAttribute("yMax") :: number
-	local zMin = repeatsFolder:GetAttribute("zMin") :: number
-	local zMax = repeatsFolder:GetAttribute("zMax") :: number
-
-	local repeatRanges = {
-		x = { min = xMin, max = xMax },
-		y = { min = yMin, max = yMax },
-		z = { min = zMin, max = zMax },
-	}
+	local repeatRanges
+	if repeatSettings then
+		repeatRanges = {}
+		if repeatSettings.x then
+			repeatRanges.x = {
+				min = (repeatsFolder:GetAttribute("xMin") :: number?) or 0,
+				max = (repeatsFolder:GetAttribute("xMax") :: number?) or 0,
+			}
+		end
+		if repeatSettings.y then
+			repeatRanges.y = {
+				min = (repeatsFolder:GetAttribute("yMin") :: number?) or 0,
+				max = (repeatsFolder:GetAttribute("yMax") :: number?) or 0,
+			}
+		end
+		if repeatSettings.z then
+			repeatRanges.z = {
+				min = (repeatsFolder:GetAttribute("zMin") :: number?) or 0,
+				max = (repeatsFolder:GetAttribute("zMax") :: number?) or 0,
+			}
+		end
+	end
 
 	return {
-		trueSize = trueSize,
-		trueRelativeCFrame = trueRelativeCFrame,
-		size = size,
-		relativeCFrame = relativeCFrame,
+		displaySize = displaySize,
+		displayRelativeCFrame = displayRelativeCFrame,
 		repeatRanges = repeatRanges,
-
-		combinedSettings = {
-			x = xRepeatSettings,
-			y = yRepeatSettings,
-			z = zRepeatSettings,
-		},
+		repeatSettings = repeatSettings,
+		realSize = realSize,
+		realRelativeCFrame = realRelativeCFrame,
 	}
-end
-
-function repeating.doesPartHaveAnyRepeatSettings(sourcePart: BasePart)
-	local xRepeatSettings = settingsHelper.getRepeatSettings(sourcePart, "x")
-	local yRepeatSettings = settingsHelper.getRepeatSettings(sourcePart, "y")
-	local zRepeatSettings = settingsHelper.getRepeatSettings(sourcePart, "z")
-
-	return xRepeatSettings.repeatKind ~= nil or yRepeatSettings.repeatKind ~= nil or zRepeatSettings.repeatKind ~= nil
-end
-
-local function deepEquals(a: any, b: any): boolean
-	if typeof(a) == typeof(b) then
-		if typeof(a) == "Vector3" and a:FuzzyEq(b, epsilon) then
-			return true
-		elseif typeof(a) == "CFrame" and mathUtil.cframeFuzzyEq(a, b) then
-			return true
-		elseif a == b then
-			return true
-		end
-	end
-
-	if type(a) ~= "table" or type(b) ~= "table" then
-		return false
-	end
-
-	for key, value in a do
-		if not deepEquals(value, b[key]) then
-			return false
-		end
-	end
-
-	for key, value in b do
-		if not deepEquals(value, a[key]) then
-			return false
-		end
-	end
-
-	return true
-end
-
-local function usesStretchToFit(axisSettings)
-	return axisSettings.repeatKind == "To Extents" and axisSettings.stretchToFit
 end
 
 -- Returns position relative to parent in the axis, size in the axis, and the range of repeats in the axis
 local function getSizeAndPositionAndRepeatRangeInAxis(
-	size: Vector3,
-	relativeCFrame: CFrame,
+	realSize: Vector3,
+	realRelativeCFrame: CFrame,
 	parentSize: Vector3,
 	axis: Vector3,
-	axisRepeatSettings: settingsHelper.RepeatSettings
-): (Vector3, Vector3, number, number)
-	local positionInAxis = relativeCFrame.Position:Dot(axis)
-	local relativeAxis = relativeCFrame:VectorToObjectSpace(axis)
-	local sizeInAxis = math.abs(size:Dot(relativeAxis))
-	local sign = math.sign(size:Dot(relativeAxis))
+	axisRepeatSettings: repeatSettings.SingleAxisSetting?
+): (Vector3, Vector3, number?, number?)
+	local positionInAxis = realRelativeCFrame.Position:Dot(axis)
+	local relativeAxis = realRelativeCFrame:VectorToObjectSpace(axis)
+	local sizeInAxis = math.abs(realSize:Dot(relativeAxis))
+	local sign = math.sign(realSize:Dot(relativeAxis))
 	local parentSizeInAxis = parentSize:Dot(axis)
 
-	if parentSizeInAxis < sizeInAxis then
+	if axisRepeatSettings == nil then
+		return sizeInAxis * relativeAxis * sign, positionInAxis * axis
+	end
+
+	if parentSizeInAxis < sizeInAxis or (parentSizeInAxis / 2 + mathUtil.epsilon) < (math.abs(positionInAxis) + sizeInAxis / 2) then
 		return sizeInAxis * relativeAxis * sign, positionInAxis * axis, 0, 0
 	end
 
 	local parentEdgePos = parentSizeInAxis / 2
 
-	if not (axisRepeatSettings.repeatKind == "To Extents" and axisRepeatSettings.stretchToFit) then
+	if not (axisRepeatSettings.settingValue == "To Extents" and axisRepeatSettings.childrenSettings.stretchToFit) then
 		local halfSize = sizeInAxis / 2
 		local rangeMin, rangeMax
-		if axisRepeatSettings.repeatKind == "To Extents" then
+		if axisRepeatSettings.settingValue == "To Extents" then
 			rangeMax = (parentEdgePos - halfSize - positionInAxis) // sizeInAxis
 			rangeMin = -((parentEdgePos - halfSize + positionInAxis) // sizeInAxis)
 		else
-			rangeMax = (axisRepeatSettings.repeatAmountPositive :: number) or 0
-			rangeMin = (axisRepeatSettings.repeatAmountNegative :: number) or 0
+			rangeMax = axisRepeatSettings.childrenSettings.repeatAmountPositive :: number
+			rangeMin = axisRepeatSettings.childrenSettings.repeatAmountNegative :: number
 		end
 
 		return sizeInAxis * relativeAxis * sign, positionInAxis * axis, rangeMax, rangeMin
@@ -191,158 +139,54 @@ end
 
 local function getSizeAndPositionAndRepeatRanges(
 	sourcePart: BasePart,
-	combinedSettings: CombinedRepeatSettings
-): (Vector3, CFrame, RepeatRanges)
-	local trueSize, trueRelativeCFrame = realTransform.getSizeAndRelativeCFrame(sourcePart)
+	repeatSettings: repeatSettings.SingleSettingGroup?
+): (Vector3, CFrame, RepeatRanges?)
+	local repeatRanges: RepeatRanges
 	local parent = sourcePart.Parent :: BasePart
-	local parentSize = parent.Size
+	local realSize, realRelativeCFrame = realTransform.getSizeAndRelativeCFrame(sourcePart)
 
-	local xSize, xPosition, xRangeMax, xRangeMin =
-		getSizeAndPositionAndRepeatRangeInAxis(trueSize, trueRelativeCFrame, parentSize, Vector3.xAxis, combinedSettings.x)
-	local ySize, yPosition, yRangeMax, yRangeMin =
-		getSizeAndPositionAndRepeatRangeInAxis(trueSize, trueRelativeCFrame, parentSize, Vector3.yAxis, combinedSettings.y)
-	local zSize, zPosition, zRangeMax, zRangeMin =
-		getSizeAndPositionAndRepeatRangeInAxis(trueSize, trueRelativeCFrame, parentSize, Vector3.zAxis, combinedSettings.z)
+	if repeatSettings and next(repeatSettings) then
+		local parentSize = parent.Size
 
-	local size = xSize + ySize + zSize
-	local position = xPosition + yPosition + zPosition
+		local xSize, xPosition, xRangeMax, xRangeMin =
+			getSizeAndPositionAndRepeatRangeInAxis(realSize, realRelativeCFrame, parentSize, Vector3.xAxis, repeatSettings.x)
+		local ySize, yPosition, yRangeMax, yRangeMin =
+			getSizeAndPositionAndRepeatRangeInAxis(realSize, realRelativeCFrame, parentSize, Vector3.yAxis, repeatSettings.y)
+		local zSize, zPosition, zRangeMax, zRangeMin =
+			getSizeAndPositionAndRepeatRangeInAxis(realSize, realRelativeCFrame, parentSize, Vector3.zAxis, repeatSettings.z)
 
-	local relativeCFrame = CFrame.new(position) * trueRelativeCFrame.Rotation
+		local displaySize = xSize + ySize + zSize
+		local position = xPosition + yPosition + zPosition
 
-	local repeatRanges = {
-		x = { min = xRangeMin, max = xRangeMax },
-		y = { min = yRangeMin, max = yRangeMax },
-		z = { min = zRangeMin, max = zRangeMax },
-	}
+		local displayRelativeCFrame = CFrame.new(position) * realRelativeCFrame.Rotation
 
-	return size, relativeCFrame, repeatRanges
+		if xRangeMax and xRangeMin then
+			repeatRanges = repeatRanges or {}
+			repeatRanges.x = { min = xRangeMin, max = xRangeMax }
+		end
+		if yRangeMax and yRangeMin then
+			repeatRanges = repeatRanges or {}
+			repeatRanges.y = { min = yRangeMin, max = yRangeMax }
+		end
+		if zRangeMax and zRangeMin then
+			repeatRanges = repeatRanges or {}
+			repeatRanges.z = { min = zRangeMin, max = zRangeMax }
+		end
+
+		return displaySize, displayRelativeCFrame, repeatRanges
+	end
+
+	return realSize, realRelativeCFrame, nil
 end
 
-local function getCurrentRepeatVariables(sourcePart: BasePart): RepeatVariables
-	local xRepeatSettings = settingsHelper.getRepeatSettings(sourcePart, "x")
-	local yRepeatSettings = settingsHelper.getRepeatSettings(sourcePart, "y")
-	local zRepeatSettings = settingsHelper.getRepeatSettings(sourcePart, "z")
-
-	local trueSize, trueRelativeCFrame
-	if xRepeatSettings.repeatKind or yRepeatSettings.repeatKind or zRepeatSettings.repeatKind then
-		trueSize, trueRelativeCFrame = realTransform.getSizeAndRelativeCFrame(sourcePart)
-	end
-
-	local repeatVariables = {
-		trueSize = trueSize,
-		trueRelativeCFrame = trueRelativeCFrame,
-		combinedSettings = {
-			x = xRepeatSettings,
-			y = yRepeatSettings,
-			z = zRepeatSettings,
-		},
-	}
-
-	local newSize, newRelativeCFrame, newRepeatRanges = getSizeAndPositionAndRepeatRanges(sourcePart, repeatVariables.combinedSettings)
-	repeatVariables.size, repeatVariables.relativeCFrame, repeatVariables.repeatRanges = newSize, newRelativeCFrame, newRepeatRanges
-
-	return repeatVariables :: RepeatVariables
+local function axisHasStretchToFitSettings(axisSettings: repeatSettings.SingleAxisSetting?)
+	return axisSettings and axisSettings.settingValue == "To Extents" and axisSettings.childrenSettings.stretchToFit
 end
 
-local function givePartsUniqueIdentifiersRecursive(part: BasePart)
-	local nameCounts = {}
-	for _, child in part:GetChildren() do
-		if child:IsA("BasePart") then
-			local name = child.Name
-			local count = nameCounts[name] or 0
-			nameCounts[name] = count + 1
-		end
-	end
-
-	for _, child in part:GetChildren() do
-		if child:IsA("BasePart") then
-			local name = child.Name
-			local count = nameCounts[name]
-			if count > 1 then
-				attributeHelper.setAttribute(child, "__uniqueId_intelliscale_internal", name .. "_" .. count)
-				givePartsUniqueIdentifiersRecursive(child)
-			end
-		end
-	end
-end
-
-local function clearUniqueIdentifiersRecursive(part: BasePart)
-	for _, child in part:GetChildren() do
-		if child:IsA("BasePart") then
-			attributeHelper.setAttribute(child, "__uniqueId_intelliscale_internal", nil)
-			clearUniqueIdentifiersRecursive(child)
-		end
-	end
-end
-
-local function getPrevAndNewRepeatVariablesIfDifferent(sourcePart: BasePart): (boolean, RepeatVariables?, RepeatVariables?)
-	local prevRepeatVariables = getCachedRepeatVariables(sourcePart)
-	local newRepeatVariables = getCurrentRepeatVariables(sourcePart)
-
-	-- First deep equals check filters out any parts that don't have any repeat settings at all
-	if deepEquals(prevRepeatVariables, newRepeatVariables) then
-		return false
-	end
-
-	-- Intialize new repeat stuff or cleanup old repeat stuff
-	local repeatsFolder: Folder = sourcePart:FindFirstChild("__repeats_intelliscale_internal") :: Folder
-	local blank = getBlankVariables(sourcePart)
-	if deepEquals(prevRepeatVariables, blank) then
-		givePartsUniqueIdentifiersRecursive(sourcePart)
-		if sourcePart:FindFirstChild("__repeats_intelliscale_internal") then
-			repeatsFolder = sourcePart:FindFirstChild("__repeats_intelliscale_internal") :: Folder
-		else
-			repeatsFolder = Instance.new("Folder")
-			repeatsFolder.Name = "__repeats_intelliscale_internal"
-			repeatsFolder.Parent = sourcePart
-		end
-		-- Create repeats folder
-		-- Any other final initialization steps
-	elseif deepEquals(newRepeatVariables, blank) then
-		clearUniqueIdentifiersRecursive(sourcePart)
-		repeatsFolder = sourcePart:FindFirstChild("__repeats_intelliscale_internal") :: Folder
-		if repeatsFolder then
-			repeatsFolder.Parent = nil -- Dont destroy cause undo history
-		end
-		-- Any other final cleanup steps
-		return false
-	end
-
-	local usesStretchToFit = usesStretchToFit(newRepeatVariables.combinedSettings.x)
-		or usesStretchToFit(newRepeatVariables.combinedSettings.y)
-		or usesStretchToFit(newRepeatVariables.combinedSettings.z)
-
-	if usesStretchToFit then
-		-- Using getTrueSizeAndRelativeCFrame will allow us to cache the current
-		-- size and relative cframe of the source part if they haven't yet been
-		-- cached. This is useful sicne the true size and cframe will be
-		-- overwritten later in this function by the stretch to fit
-		-- functionality.
-		local trueSize, trueRelativeCFrame = realTransform.getSizeAndRelativeCFrame(sourcePart)
-
-		attributeHelper.setAttribute(repeatsFolder, "trueSize", trueSize)
-		attributeHelper.setAttribute(repeatsFolder, "trueRelativeCFrame", trueRelativeCFrame)
-		attributeHelper.setAttribute(sourcePart, "__trueSize_intelliscale_internal", trueSize, true)
-		attributeHelper.setAttribute(sourcePart, "__trueRelativeCFrame_intelliscale_internal", trueRelativeCFrame, true)
-	else
-		if realTransform.hasTransform(sourcePart) then
-			attributeHelper.setAttribute(repeatsFolder, "trueSize", nil)
-			attributeHelper.setAttribute(repeatsFolder, "trueRelativeCFrame", nil)
-			attributeHelper.setAttribute(sourcePart, "__trueSize_intelliscale_internal", nil, true)
-			attributeHelper.setAttribute(sourcePart, "__trueRelativeCFrame_intelliscale_internal", nil, true)
-		end
-	end
-
-	attributeHelper.setAttribute(repeatsFolder, "size", newRepeatVariables.size)
-	attributeHelper.setAttribute(repeatsFolder, "relativeCFrame", newRepeatVariables.relativeCFrame)
-	attributeHelper.setAttribute(repeatsFolder, "xMin", newRepeatVariables.repeatRanges.x.min)
-	attributeHelper.setAttribute(repeatsFolder, "xMax", newRepeatVariables.repeatRanges.x.max)
-	attributeHelper.setAttribute(repeatsFolder, "yMin", newRepeatVariables.repeatRanges.y.min)
-	attributeHelper.setAttribute(repeatsFolder, "yMax", newRepeatVariables.repeatRanges.y.max)
-	attributeHelper.setAttribute(repeatsFolder, "zMin", newRepeatVariables.repeatRanges.z.min)
-	attributeHelper.setAttribute(repeatsFolder, "zMax", newRepeatVariables.repeatRanges.z.max)
-
-	return true, prevRepeatVariables, newRepeatVariables
+local function hasStretchToFitSettings(repeatSettings: repeatSettings.SingleSettingGroup)
+	return axisHasStretchToFitSettings(repeatSettings.x)
+		or axisHasStretchToFitSettings(repeatSettings.y)
+		or axisHasStretchToFitSettings(repeatSettings.z)
 end
 
 local function flattenInstanceHierarchyRecursive<InstanceType>(instance: InstanceType, newParent: Instance): InstanceType?
@@ -370,15 +214,26 @@ end
 
 local function reconcileRepeats(
 	sourcePart: BasePart,
-	shouldRecreate: boolean?,
+	shouldRecreate: boolean,
 	prevRepeatRanges: RepeatRanges?,
 	newRepeatRanges: RepeatRanges
 )
 	local repeatsFolder = sourcePart:FindFirstChild("__repeats_intelliscale_internal") :: Folder
 
-	local newXMin, newXMax = newRepeatRanges.x.min, newRepeatRanges.x.max
-	local newYMin, newYMax = newRepeatRanges.y.min, newRepeatRanges.y.max
-	local newZMin, newZMax = newRepeatRanges.z.min, newRepeatRanges.z.max
+	local newXMin, newXMax = 0, 0
+	if newRepeatRanges.x then
+		newXMin, newXMax = newRepeatRanges.x.min, newRepeatRanges.x.max
+	end
+
+	local newYMin, newYMax = 0, 0
+	if newRepeatRanges.y then
+		newYMin, newYMax = newRepeatRanges.y.min, newRepeatRanges.y.max
+	end
+
+	local newZMin, newZMax = 0, 0
+	if newRepeatRanges.z then
+		newZMin, newZMax = newRepeatRanges.z.min, newRepeatRanges.z.max
+	end
 
 	if shouldRecreate then
 		repeatsFolder:ClearAllChildren()
@@ -406,9 +261,20 @@ local function reconcileRepeats(
 	local relativeCFrame = parent.CFrame:ToObjectSpace(sourcePart.CFrame)
 
 	if prevRepeatRanges then
-		local prevXMin, prevXMax = prevRepeatRanges.x.min, prevRepeatRanges.x.max
-		local prevYMin, prevYMax = prevRepeatRanges.y.min, prevRepeatRanges.y.max
-		local prevZMin, prevZMax = prevRepeatRanges.z.min, prevRepeatRanges.z.max
+		local prevXMin, prevXMax = 0, 0
+		if prevRepeatRanges.x then
+			prevXMin, prevXMax = prevRepeatRanges.x.min, prevRepeatRanges.x.max
+		end
+
+		local prevYMin, prevYMax = 0, 0
+		if prevRepeatRanges.y then
+			prevYMin, prevYMax = prevRepeatRanges.y.min, prevRepeatRanges.y.max
+		end
+
+		local prevZMin, prevZMax = 0, 0
+		if prevRepeatRanges.z then
+			prevZMin, prevZMax = prevRepeatRanges.z.min, prevRepeatRanges.z.max
+		end
 
 		for x = prevXMin, prevXMax do
 			for y = prevYMin, prevYMax do
@@ -469,71 +335,196 @@ local function reconcileRepeats(
 	end
 end
 
+local changesLastFrame = 0
+local changesInFrame = 0
 function repeating.updateRepeat(sourcePart: BasePart)
 	if not attributeHelper.wasLastChangedByMe(sourcePart) then
 		return
 	end
 
-	local isDifferent, prevRepeatVariables_, newRepeatVariables_ = getPrevAndNewRepeatVariablesIfDifferent(sourcePart)
-	local prev = prevRepeatVariables_ :: RepeatVariables
-	local new = newRepeatVariables_ :: RepeatVariables
-	if not isDifferent then
+	changesInFrame += 1
+	if changesInFrame > 10 or changesLastFrame > 10 then
+		error("No more  repeat changes this frame, hung too long.")
 		return
+	end
+
+	local prev = getCachedRepeatVariables(sourcePart)
+
+	local newRepeatSettings = repeatSettings.getSettingGroup(sourcePart)
+	local newRealSize, newRealRelativeCFrame = realTransform.getSizeAndRelativeCFrameAttributes(sourcePart)
+	local newDisplaySize, newDisplayRelativeCFrame, newRepeatRanges = getSizeAndPositionAndRepeatRanges(sourcePart, newRepeatSettings)
+
+	local new: RepeatVariables = {
+		displaySize = newDisplaySize,
+		displayRelativeCFrame = newDisplayRelativeCFrame,
+		repeatRanges = newRepeatRanges,
+		repeatSettings = newRepeatSettings,
+		realRelativeCFrame = newRealSize,
+		realSize = newRealRelativeCFrame,
+	}
+
+	local prevHasRepeatSettings = prev.repeatSettings and next(prev.repeatSettings)
+	local newHasRepeatSettings = new.repeatSettings and next(new.repeatSettings)
+
+	if (not prevHasRepeatSettings and not newHasRepeatSettings) or fuzzyDeepEquals(prev, new) then
+		return
+	end
+
+	-- Intialize new repeat stuff or cleanup old repeat stuff
+	local repeatsFolder: Folder = sourcePart:FindFirstChild("__repeats_intelliscale_internal") :: Folder
+	if not (prev.repeatSettings and next(prev.repeatSettings)) then
+		if sourcePart:FindFirstChild("__repeats_intelliscale_internal") then
+			repeatsFolder = sourcePart:FindFirstChild("__repeats_intelliscale_internal") :: Folder
+		else
+			repeatsFolder = Instance.new("Folder")
+			repeatsFolder.Name = "__repeats_intelliscale_internal"
+			repeatsFolder.Parent = sourcePart
+			unselectedInitialFolderParts[sourcePart] = true
+		end
+	end
+
+	if newRepeatSettings and hasStretchToFitSettings(newRepeatSettings) then
+		local realSize, realRelativeCFrame = realTransform.getSizeAndRelativeCFrame(sourcePart)
+		realTransform.setSizeAndRelativeCFrameAttributes(sourcePart, realSize, realRelativeCFrame)
+		realTransform.setSizeAndRelativeCFrameAttributes(repeatsFolder, realSize, realRelativeCFrame)
+	else
+		if realTransform.hasTransform(sourcePart) then
+			realTransform.setSizeAndRelativeCFrameAttributes(sourcePart, nil, nil)
+			realTransform.setSizeAndRelativeCFrameAttributes(repeatsFolder, nil, nil)
+		end
 	end
 
 	local parent = sourcePart.Parent :: BasePart
 
-	local prevRelativeCFrame = prev.relativeCFrame :: CFrame
-	local newRelativeCFrame = new.relativeCFrame :: CFrame
+	local prevDisplayRelativeCFrame = prev.displayRelativeCFrame :: CFrame
 	local partRelativeCFrame = parent.CFrame:ToObjectSpace(sourcePart.CFrame)
-	local shouldUpdateRotation = not mathUtil.cframeFuzzyEq(newRelativeCFrame.Rotation, partRelativeCFrame.Rotation)
-	local didRotationChange = shouldUpdateRotation or not mathUtil.cframeFuzzyEq(newRelativeCFrame.Rotation, prevRelativeCFrame.Rotation)
+	local shouldUpdateRotation = not mathUtil.cframeFuzzyEq(newDisplayRelativeCFrame.Rotation, prevDisplayRelativeCFrame.Rotation)
+	local didRotationChange = shouldUpdateRotation
+		or not mathUtil.cframeFuzzyEq(newDisplayRelativeCFrame.Rotation, prevDisplayRelativeCFrame.Rotation)
 
-	local shouldUpdatePosition = not newRelativeCFrame.Position:FuzzyEq(partRelativeCFrame.Position, epsilon)
+	local shouldUpdatePosition = not newDisplayRelativeCFrame.Position:FuzzyEq(partRelativeCFrame.Position, mathUtil.epsilon)
 
-	local newSize = new.size :: Vector3
-	local prevSize = prev.size :: Vector3
-	local shouldUpdateSize = sourcePart.Size ~= newSize
-	local didSizeChange = shouldUpdateSize or not newSize:FuzzyEq(prevSize, epsilon)
+	local prevDisplaySize = prev.displaySize :: Vector3
+	local shouldUpdateSize = sourcePart.Size ~= newDisplaySize
+	local didSizeChange = shouldUpdateSize or not newDisplaySize:FuzzyEq(prevDisplaySize, mathUtil.epsilon)
 
-	local shouldUpdateRanges = not deepEquals(prev.repeatRanges, new.repeatRanges)
+	local shouldUpdateRanges = not fuzzyDeepEquals(prev.repeatRanges, new.repeatRanges)
 
-	-- Size changes include rotation & position changes, and rotation changes
-	-- include position changes. So its safe for this logic to be exclusive.
+	-- Reposition the source part if necessary
 	if shouldUpdateSize then
-		local newCFrame = parent.CFrame * newRelativeCFrame
+		local newCFrame = parent.CFrame * newDisplayRelativeCFrame
 		local changedList = {}
 
 		local axes: { types.AxisString } = {}
 
-		if usesStretchToFit(new.combinedSettings.x) then
+		if not mathUtil.fuzzyEq(newDisplaySize.X, prevDisplaySize.X) then
 			table.insert(axes, "x")
 		end
-		if usesStretchToFit(new.combinedSettings.y) then
+		if not mathUtil.fuzzyEq(newDisplaySize.Y, prevDisplaySize.Y) then
 			table.insert(axes, "y")
 		end
-		if usesStretchToFit(new.combinedSettings.z) then
+		if not mathUtil.fuzzyEq(newDisplaySize.Z, prevDisplaySize.Z) then
 			table.insert(axes, "z")
 		end
 
-		scaling.moveAndScaleChildrenRecursive(sourcePart, new.size, newCFrame, axes, changedList)
+		scaling.moveAndScaleChildrenRecursive(sourcePart, newDisplaySize, newCFrame, axes, changedList)
 
 		for _, changedPart in changedList do
 			repeating.updateRepeat(changedPart)
 		end
 	elseif shouldUpdateRotation or shouldUpdatePosition then
-		local deltaCFrame = partRelativeCFrame:ToObjectSpace(newRelativeCFrame)
-		scaling.cframeChildrenRecursive(sourcePart, deltaCFrame, false, true)
+		local deltaCFrame = partRelativeCFrame:ToObjectSpace(newDisplayRelativeCFrame)
+		scaling.cframeRecursive(sourcePart, deltaCFrame, false, true)
 	end
 
-	if shouldUpdateRanges or didSizeChange or didRotationChange then
-		local shouldRecreate = didSizeChange
-		reconcileRepeats(sourcePart, shouldRecreate, prev.repeatRanges, new.repeatRanges :: RepeatRanges)
+	-- If we've cleared all repeat settings, remove the repeats folder.
+	-- Otherwise, update the cached variables on the folder and reconcile the
+	-- repeated objects, if necessary.
+	if not (newRepeatSettings and next(newRepeatSettings :: { [string]: any })) then
+		repeatsFolder = sourcePart:FindFirstChild("__repeats_intelliscale_internal") :: Folder
+		if repeatsFolder then
+			repeatsFolder.Parent = nil
+		end
+	else
+		attributeHelper.setAttribute(repeatsFolder, "displaySize", newDisplaySize)
+		attributeHelper.setAttribute(repeatsFolder, "displayRelativeCFrame", newDisplayRelativeCFrame)
+
+		if newRepeatRanges and newRepeatRanges.x then
+			attributeHelper.setAttribute(repeatsFolder, "xMin", newRepeatRanges.x.min)
+			attributeHelper.setAttribute(repeatsFolder, "xMax", newRepeatRanges.x.max)
+		else
+			attributeHelper.setAttribute(repeatsFolder, "xMin", nil)
+			attributeHelper.setAttribute(repeatsFolder, "xMax", nil)
+		end
+
+		if newRepeatRanges and newRepeatRanges.y then
+			attributeHelper.setAttribute(repeatsFolder, "yMin", newRepeatRanges.y.min)
+			attributeHelper.setAttribute(repeatsFolder, "yMax", newRepeatRanges.y.max)
+		else
+			attributeHelper.setAttribute(repeatsFolder, "yMin", nil)
+			attributeHelper.setAttribute(repeatsFolder, "yMax", nil)
+		end
+
+		if newRepeatRanges and newRepeatRanges.z then
+			attributeHelper.setAttribute(repeatsFolder, "zMin", newRepeatRanges.z.min)
+			attributeHelper.setAttribute(repeatsFolder, "zMax", newRepeatRanges.z.max)
+		else
+			attributeHelper.setAttribute(repeatsFolder, "zMin", nil)
+			attributeHelper.setAttribute(repeatsFolder, "zMax", nil)
+		end
+
+		repeatSettings.cacheSettings(newRepeatSettings, repeatsFolder)
+
+		if shouldUpdateRanges or didSizeChange or didRotationChange then
+			local shouldRecreate = didSizeChange
+			reconcileRepeats(sourcePart, shouldRecreate, prev.repeatRanges, new.repeatRanges :: RepeatRanges)
+		end
 	end
 end
 
-function repeating.initializeRepeating()
-	janitor:Add(selectionHelper.bindToAnyContainedAttributeChanged(function()
+function repeating.isFolderUnselected(part: BasePart)
+	return unselectedInitialFolderParts[part]
+end
+
+function repeating.getFolder(part: BasePart)
+	return part:FindFirstChild("__repeats_intelliscale_internal") :: Folder
+end
+
+function repeating.initialize()
+	janitor:Add(selectionHelper.addSelectionChangeCallback(selectionHelper.callbackDicts.any, function(selection: types.Selection)
+		local selectionSet = {}
+
+		for _, instance in selection do
+			selectionSet[instance] = true
+		end
+
+		for part, _ in unselectedInitialFolderParts do
+			if not selectionSet[part] then
+				unselectedInitialFolderParts[part] = nil
+			end
+		end
+	end))
+
+	janitor:Add(function()
+		unselectedInitialFolderParts = {}
+	end)
+
+	local repeatingAttributes = {
+		"xRepeatKind",
+		"xStretchToFit",
+		"xRepeatAmountPositive",
+		"xRepeatAmountNegative",
+		"yRepeatKind",
+		"yStretchToFit",
+		"yRepeatAmountPositive",
+		"yRepeatAmountNegative",
+		"zRepeatKind",
+		"zStretchToFit",
+		"zRepeatAmountPositive",
+		"zRepeatAmountNegative",
+	}
+
+	janitor:Add(selectionHelper.addAttributeChangeCallback(selectionHelper.callbackDicts.contained, repeatingAttributes, function()
 		if repeating.isUpdatingFromAttributeChange then
 			return
 		end
@@ -553,14 +544,9 @@ function repeating.initializeRepeating()
 		end)
 	end))
 
-	janitor:Add(scaling.partScaledWithHandles:Connect(function(updatedParts)
-		changeHistoryHelper.recordUndoChange(function()
-			for _, part in updatedParts do
-				if selectionHelper.isValidContained(part) then
-					repeating.updateRepeat(part)
-				end
-			end
-		end)
+	janitor:Add(RunService.Heartbeat:Connect(function()
+		changesLastFrame = changesInFrame
+		changesInFrame = 0
 	end))
 
 	return janitor

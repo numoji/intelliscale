@@ -1,6 +1,5 @@
 --!strict
-local source = script.Parent.Parent
-local types = require(source.types)
+local types = require(script.Parent.Parent.types)
 
 local geometryHelper = {}
 

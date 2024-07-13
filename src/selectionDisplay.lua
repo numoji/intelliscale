@@ -2,13 +2,13 @@
 local CoreGui = game:GetService("CoreGui")
 local selectionDisplay = {}
 
-local packages = script.Parent.Parent.Packages
-local Janitor = require(packages.Janitor)
+local Janitor = require(script.Parent.Parent.Packages.Janitor)
 
-local source = script.Parent
-local geometryHelper = require(source.utility.geometryHelper)
-local selectionHelper = require(source.utility.selectionHelper)
-local types = require(source.types)
+local constraintSettings = require(script.Parent.utility.settingsHelper.constraintSettings)
+local containerHelper = require(script.Parent.utility.containerHelper)
+local geometryHelper = require(script.Parent.utility.geometryHelper)
+local selectionHelper = require(script.Parent.utility.selectionHelper)
+local types = require(script.Parent.types)
 
 local janitor = Janitor.new()
 
@@ -121,7 +121,14 @@ local function updateCylindersByAxis(
 	cylinderA: CylinderHandleAdornment,
 	cylinderB: CylinderHandleAdornment
 )
-	local constraint = selected:GetAttribute(axis .. "Constraint") or "Scale"
+	local constraintSettings = constraintSettings.getSettingGroup(selected)
+	if not constraintSettings then
+		cylinderA.Adornee = nil :: any
+		cylinderB.Adornee = nil :: any
+		return
+	end
+
+	local constraint = constraintSettings[axis]
 	local constraintType = geometryHelper.constraintMap[constraint]
 
 	local axisEnum = geometryHelper.axisEnumByString[axis]
@@ -137,7 +144,7 @@ local function updateCylindersByAxis(
 	updateFunctionsMap[constraintType](axisEnum, cylinderA, cylinderB)
 end
 
-function selectionDisplay.initializeHighlightContainer()
+function selectionDisplay.initialize()
 	local screenGui = janitor:Add(Instance.new("ScreenGui"))
 	screenGui.Parent = CoreGui
 	screenGui.Name = "IntelliscaleConstraintVisualization"
@@ -153,7 +160,7 @@ function selectionDisplay.initializeHighlightContainer()
 	local zCylinderB = createCylinderHandle(Color3.fromRGB(90, 0, 255), screenGui)
 
 	local function update(selectedPart: BasePart, fauxPart: BasePart)
-		if selectionHelper.isValidContained(selectedPart) then
+		if containerHelper.isValidContained(selectedPart) then
 			containerSelectionBox.Adornee = selectedPart.Parent
 			updateCylindersByAxis("x", selectedPart, xCylinderA, xCylinderB)
 			updateCylindersByAxis("y", selectedPart, yCylinderA, yCylinderB)
@@ -175,7 +182,7 @@ function selectionDisplay.initializeHighlightContainer()
 		end
 	end
 
-	selectionHelper.bindToSingleEitherSelection(update, function()
+	selectionHelper.addSelectionChangeCallback(selectionHelper.callbackDicts.singleContainerOrContained, update, function()
 		containerSelectionBox.Adornee = nil
 		fauxSelectionBox.Adornee = nil
 		xCylinderA.Adornee = nil :: any
@@ -186,9 +193,13 @@ function selectionDisplay.initializeHighlightContainer()
 		zCylinderB.Adornee = nil :: any
 	end)
 
-	selectionHelper.bindToSingleEitherChanged(function(changedInstance: Instance, selectedPart: BasePart, fauxPart: BasePart)
-		update(selectedPart, fauxPart)
-	end)
+	selectionHelper.addPropertyChangeCallback(
+		selectionHelper.callbackDicts.singleContainerOrContained,
+		{ "Parent", "Size", "CFrame" },
+		function(_, selectedPart, fauxPart)
+			update(selectedPart, fauxPart)
+		end
+	)
 
 	return janitor
 end

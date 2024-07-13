@@ -1,14 +1,6 @@
-local utility = script.Parent
-local attributeHelper = require(utility.attributeHelper)
-
+local attributeHelper = require(script.Parent.attributeHelper)
+local changeDeduplicator = require(script.Parent.changeDeduplicator)
 local realTransform = {}
-
-local function cf(cf: CFrame?)
-	if not cf then
-		return "nil"
-	end
-	return `[{cf.X}, {cf.Y}, {cf.Z}]`
-end
 
 function clampSize(newSize)
 	if newSize.X < 0.001 or newSize.Y < 0.001 or newSize.Z < 0.001 then
@@ -24,16 +16,16 @@ function realTransform.hasTransform(part: BasePart): boolean
 end
 
 function realTransform.hasSize(part: BasePart): boolean
-	return part:GetAttribute("__trueSize_intelliscale_internal") ~= nil
+	return part:GetAttribute("realSize") ~= nil
 end
 
 function realTransform.hasCFrame(part: BasePart): boolean
-	return part:GetAttribute("__trueRelativeCFrame_intelliscale_internal") ~= nil
+	return part:GetAttribute("realRelativeCFrame") ~= nil
 end
 
 -- Get --
 function realTransform.getRelativeCFrame(part: BasePart): CFrame
-	local relativeCFrame = part:GetAttribute("__trueRelativeCFrame_intelliscale_internal") :: CFrame
+	local relativeCFrame = part:GetAttribute("realRelativeCFrame") :: CFrame
 	if not relativeCFrame then
 		local parent = part.Parent :: BasePart
 		relativeCFrame = parent.CFrame:ToObjectSpace(part.CFrame)
@@ -43,7 +35,7 @@ function realTransform.getRelativeCFrame(part: BasePart): CFrame
 end
 
 function realTransform.getGlobalCFrame(part: BasePart, parentCFrame: CFrame?): CFrame
-	local relativeCFrame = part:GetAttribute("__trueRelativeCFrame_intelliscale_internal") :: CFrame
+	local relativeCFrame = part:GetAttribute("realRelativeCFrame") :: CFrame
 	if relativeCFrame then
 		if not parentCFrame then
 			local parent = part.Parent :: BasePart
@@ -58,7 +50,7 @@ function realTransform.getGlobalCFrame(part: BasePart, parentCFrame: CFrame?): C
 end
 
 function realTransform.getSize(part: BasePart): Vector3
-	local size = part:GetAttribute("__trueSize_intelliscale_internal") :: Vector3
+	local size = part:GetAttribute("realSize") :: Vector3
 	if size then
 		return size
 	end
@@ -80,20 +72,30 @@ function realTransform.getSizeAndGlobalCFrame(part: BasePart, parentCFrame: CFra
 	return size, globalCFrame
 end
 
+function realTransform.getSizeAndRelativeCFrameAttributes(instance: Instance)
+	local relativeCFrame = instance:GetAttribute("realRelativeCFrame") :: CFrame?
+	local size = instance:GetAttribute("realSize") :: Vector3?
+
+	return size, relativeCFrame
+end
+
 -- Set --
-function realTransform.setSize(part: BasePart, newSize: Vector3)
-	local size = part:GetAttribute("__trueSize_intelliscale_internal") :: Vector3
+function realTransform.setSize(part: BasePart, newSize: Vector3, extraLevel: number?)
+	local size = part:GetAttribute("realSize") :: Vector3
 	if size then
-		attributeHelper.setAttribute(part, "__trueSize_intelliscale_internal", clampSize(newSize), true)
+		-- inspectPrint(`{part.Name} set size att`, 2 + (extraLevel or 0))
+		attributeHelper.setAttribute(part, "realSize", clampSize(newSize), 1 + (extraLevel or 0), true)
 	else
+		-- inspectPrint(`{part.Name} set size prop`, 2 + (extraLevel or 0))
 		part.Size = newSize
 	end
 end
 
-function realTransform.setRelativeCFrame(part: BasePart, newRelativeCFrame: CFrame, parentCFrame: CFrame?)
-	local relativeCFrame = part:GetAttribute("__trueRelativeCFrame_intelliscale_internal") :: Vector3
+function realTransform.setRelativeCFrame(part: BasePart, newRelativeCFrame: CFrame, parentCFrame: CFrame?, extraLevel: number?)
+	local relativeCFrame = part:GetAttribute("realRelativeCFrame") :: Vector3
 	if relativeCFrame then
-		attributeHelper.setAttribute(part, "__trueRelativeCFrame_intelliscale_internal", newRelativeCFrame, true)
+		-- inspectPrint(`{part.Name} set cf att`, 2 + (extraLevel or 0))
+		attributeHelper.setAttribute(part, "realRelativeCFrame", newRelativeCFrame, 1 + (extraLevel or 0), true)
 	else
 		if not parentCFrame then
 			local parent = part.Parent :: BasePart
@@ -101,12 +103,13 @@ function realTransform.setRelativeCFrame(part: BasePart, newRelativeCFrame: CFra
 		end
 
 		assert(parentCFrame, "Unable to get parent cframe")
-		part.CFrame = parentCFrame * newRelativeCFrame
+		local callingScript = debug.info(2 + (extraLevel or 0), "s"):match("%a+$")
+		changeDeduplicator.setProp(callingScript, part, "CFrame", newRelativeCFrame)
 	end
 end
 
-function realTransform.setGlobalCFrame(part: BasePart, newGlobalCFrame: CFrame, parentCFrame: CFrame?)
-	local relativeCFrame = part:GetAttribute("__trueRelativeCFrame_intelliscale_internal") :: Vector3
+function realTransform.setGlobalCFrame(part: BasePart, newGlobalCFrame: CFrame, parentCFrame: CFrame?, extraLevel: number?)
+	local relativeCFrame = part:GetAttribute("realRelativeCFrame") :: Vector3
 	if relativeCFrame then
 		if not parentCFrame then
 			local parent = part.Parent :: BasePart
@@ -114,20 +117,44 @@ function realTransform.setGlobalCFrame(part: BasePart, newGlobalCFrame: CFrame, 
 		end
 		assert(parentCFrame, "Unable to get parent cframe")
 		local newRelativeCFrame = parentCFrame:ToObjectSpace(newGlobalCFrame)
-		attributeHelper.setAttribute(part, "__trueRelativeCFrame_intelliscale_internal", newRelativeCFrame, true)
+		-- inspectPrint(`{part.Name} set cf att`, 2 + (extraLevel or 0))
+		attributeHelper.setAttribute(part, "realRelativeCFrame", newRelativeCFrame, 1 + (extraLevel or 0), true)
 	else
-		part.CFrame = newGlobalCFrame
+		-- inspectPrint(`{part.Name} set cf prop`, 2 + (extraLevel or 0))
+
+		local callingScript = debug.info(2 + (extraLevel or 0), "s"):match("%a+$")
+		changeDeduplicator.setProp(callingScript, part, "CFrame", newGlobalCFrame)
 	end
 end
 
 function realTransform.setSizeAndRelativeCFrame(part: BasePart, newSize: Vector3, newGlobalCFrame: CFrame, parentCFrame: CFrame?)
-	realTransform.setSize(part, newSize)
-	realTransform.setRelativeCFrame(part, newGlobalCFrame, parentCFrame)
+	realTransform.setSize(part, newSize, 1)
+	realTransform.setRelativeCFrame(part, newGlobalCFrame, parentCFrame, 1)
 end
 
 function realTransform.setSizeAndGlobalCFrame(part: BasePart, newSize: Vector3, newGlobalCFrame: CFrame, parentCFrame: CFrame?)
-	realTransform.setSize(part, newSize)
-	realTransform.setGlobalCFrame(part, newGlobalCFrame, parentCFrame)
+	realTransform.setSize(part, newSize, 1)
+	realTransform.setGlobalCFrame(part, newGlobalCFrame, parentCFrame, 1)
+end
+
+function realTransform.setRelativeCFrameAttribute(part: BasePart, newRelativeCFrame: CFrame?, extraLevel: number?)
+	-- inspectPrint(`{part.Name} set cf att`, 2 + (extraLevel or 0))
+	attributeHelper.setAttribute(part, "realRelativeCFrame", newRelativeCFrame, 1 + (extraLevel or 0), true)
+end
+
+function realTransform.setSizeAttribute(part: BasePart, newSize: Vector3?, extraLevel: number?)
+	-- inspectPrint(`{part.Name} set size att`, 2 + (extraLevel or 0))
+	attributeHelper.setAttribute(part, "realSize", newSize, 1 + (extraLevel or 0), true)
+end
+
+function realTransform.setSizeAndRelativeCFrameAttributes(
+	instance: Instance,
+	newSize: Vector3?,
+	newRelativeCFrame: CFrame?,
+	extraLevel: number?
+)
+	attributeHelper.setAttribute(instance, "realSize", newSize, 1, true)
+	attributeHelper.setAttribute(instance, "realRelativeCFrame", newRelativeCFrame, 1, true)
 end
 
 return realTransform

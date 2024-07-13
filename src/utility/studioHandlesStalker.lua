@@ -1,7 +1,6 @@
 --!strict
 local CoreGui = game:GetService("CoreGui")
-local packages = script.Parent.Parent.Parent.Packages
-local Janitor = require(packages.Janitor)
+local Janitor = require(script.Parent.Parent.Parent.Packages.Janitor)
 
 local studioHandlesStalker = {}
 local janitor = Janitor.new()

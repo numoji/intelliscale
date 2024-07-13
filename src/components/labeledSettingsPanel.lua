@@ -1,7 +1,6 @@
 --!strict
-local packages = script.Parent.Parent.Parent.Packages
-local React = require(packages.React)
-local StudioComponents = require(packages.StudioComponents)
+local React = require(script.Parent.Parent.Parent.Packages.React)
+local StudioComponents = require(script.Parent.Parent.Parent.Packages.StudioComponents)
 
 local e = React.createElement
 
@@ -36,6 +35,7 @@ function labeledSettingsPanel(props)
 	local listPadding = props.listPadding or 2
 	local position = props.Position
 	local layoutOrder = props.LayoutOrder
+	local visible = props.Visible
 	local splitterDivision, setSplitterDivision = React.useState(defaultSplit)
 	local contentHeight = paddingTop + paddingBottom
 
@@ -90,6 +90,7 @@ function labeledSettingsPanel(props)
 		Size = UDim2.new(1, 0, 0, contentHeight),
 		Alpha = splitterDivision,
 		OnChanged = setSplitterDivision,
+		Visible = visible,
 	}, {
 		Side0 = e(React.Fragment, {}, side0),
 		Side1 = e(React.Fragment, {}, side1),

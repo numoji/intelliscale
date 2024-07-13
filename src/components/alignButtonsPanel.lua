@@ -1,21 +1,24 @@
 --!strict
-local packages = script.Parent.Parent.Parent.Packages
-local React = require(packages.React)
-local StudioComponents = require(packages.StudioComponents)
+local React = require(script.Parent.Parent.Parent.Packages.React)
+local StudioComponents = require(script.Parent.Parent.Parent.Packages.StudioComponents)
+local changeDeduplicator = require(script.Parent.Parent.utility.changeDeduplicator)
+local repeating = require(script.Parent.Parent.repeating)
 
-local source = script.Parent.Parent
-local changeHistoryHelper = require(source.utility.changeHistoryHelper)
-local geometryHelper = require(source.utility.geometryHelper)
-local realTransform = require(source.utility.realTransform)
-local selectionHelper = require(source.utility.selectionHelper)
+local changeHistoryHelper = require(script.Parent.Parent.utility.changeHistoryHelper)
+local geometryHelper = require(script.Parent.Parent.utility.geometryHelper)
+local mathUtil = require(script.Parent.Parent.utility.mathUtil)
+local realTransform = require(script.Parent.Parent.utility.realTransform)
+local selectionHelper = require(script.Parent.Parent.utility.selectionHelper)
 
 local e = React.createElement
 
 local function positionAlongParentAxis(part: BasePart, axisEnum: Enum.Axis, alpha: number)
 	local axis = geometryHelper.axisByEnum[axisEnum]
 
-	local parent = part.Parent :: BasePart
-	local size, cframe = realTransform.getSizeAndGlobalCFrame(part)
+	local realPart = selectionHelper.getRealInstance(part) :: BasePart
+
+	local parent = realPart.Parent :: BasePart
+	local size, cframe = realTransform.getSizeAndGlobalCFrame(realPart)
 
 	local relativeCFrame = parent.CFrame:ToObjectSpace(cframe)
 	local positionInAxis = relativeCFrame.Position:Dot(axis)
@@ -32,11 +35,18 @@ local function positionAlongParentAxis(part: BasePart, axisEnum: Enum.Axis, alph
 	local sign = math.sign(alpha)
 
 	local offset = rangeInAxis - (sign * positionInAxis)
-	if offset <= 0 and offset ~= -sizeInAxis then
+
+	if offset <= 0 and not mathUtil.fuzzyEq(offset, -sizeInAxis) and alpha ~= 0 then
 		newPosition += sizeInAxis * axis * sign
 	end
 
-	realTransform.setGlobalCFrame(part, (parent.CFrame * CFrame.new(newPosition)) * cframe.Rotation)
+	local newCFrame = (parent.CFrame * CFrame.new(newPosition)) * cframe.Rotation
+
+	realTransform.setGlobalCFrame(realPart, newCFrame)
+	if realPart ~= part then
+		changeDeduplicator.setProp("scaling", part, "CFrame", newCFrame, -1)
+	end
+	repeating.updateRepeat(realPart)
 end
 
 local function buttonsRow(props)
@@ -71,8 +81,8 @@ local function alignButtonsPanel(props)
 
 	local selectedPart: BasePart?, setSelectedPart = React.useState(nil :: BasePart?)
 	React.useEffect(function()
-		return selectionHelper.bindToSingleContainedSelection(function(selected)
-			setSelectedPart(selected)
+		return selectionHelper.addSelectionChangeCallback(selectionHelper.callbackDicts.singleContained, function(_, fauxSelected)
+			setSelectedPart(fauxSelected)
 		end, function()
 			setSelectedPart(nil)
 		end)

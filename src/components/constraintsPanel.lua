@@ -1,20 +1,12 @@
 --!strict
-local Selection = game:GetService("Selection")
+local React = require(script.Parent.Parent.Parent.Packages.React)
+local StudioComponents = require(script.Parent.Parent.Parent.Packages.StudioComponents)
 
-local packages = script.Parent.Parent.Parent.Packages
+local constraintSettings = require(script.Parent.Parent.utility.settingsHelper.constraintSettings)
+local settingsHelper = require(script.Parent.Parent.utility.settingsHelper)
+local types = require(script.Parent.Parent.types)
 
-local React = require(packages.React)
-local StudioComponents = require(packages.StudioComponents)
-
-local source = script.Parent.Parent
-local attributeHelper = require(source.utility.attributeHelper)
-local changeHistoryHelper = require(source.utility.changeHistoryHelper)
-local selectionHelper = require(source.utility.selectionHelper)
-local settingsHelper = require(source.utility.settingsHelper)
-local types = require(source.types)
-
-local components = script.Parent
-local labeledSettingsPanel = require(components.labeledSettingsPanel)
+local labeledSettingsPanel = require(script.Parent.labeledSettingsPanel)
 
 local e = React.createElement
 
@@ -26,9 +18,8 @@ local minAndMaxNamesByAxis = {
 
 function getConstraintSettingProps(
 	axis: types.AxisString,
-	disabled: boolean,
-	constraints: settingsHelper.ConstraintSettings,
-	defaultOverrides: settingsHelper.ConstraintDefaultOverrides
+	settings: constraintSettings.MultipleSettingGroups?,
+	overrides: constraintSettings.MixedDisplayOverride?
 )
 	local min = minAndMaxNamesByAxis[axis][1]
 	local max = minAndMaxNamesByAxis[axis][2]
@@ -37,67 +28,77 @@ function getConstraintSettingProps(
 		Items = { min, max, `{min} and {max}`, "Center", "Scale" },
 		Size = UDim2.new(1, 0, 0, StudioComponents.Constants.DefaultDropdownHeight),
 		-- ClearButton = true,
-		DefaultText = defaultOverrides[axis] or "None",
-		Disabled = disabled,
-		SelectedItem = constraints[axis] or (not disabled and "Scale" or nil),
-		OnItemSelected = function(newItem)
-			changeHistoryHelper.recordUndoChange(function()
-				for _, instance in selectionHelper.getContainedAndContainerSelection() do
-					if instance:IsA("BasePart") then
-						attributeHelper.setAttribute(instance, axis .. "Constraint", newItem)
-					end
-				end
-			end)
-		end,
+		DefaultText = overrides and overrides[axis] or "None",
+		SelectedItem = settings and settings[axis] or nil,
+		OnItemSelected = settingsHelper.createAttributeSetter((axis .. "Constraint") :: types.SettingAttribute),
 	}
 end
 
+type ConstraintsState = {
+	disabled: boolean,
+	settings: constraintSettings.MultipleSettingGroups?,
+	overrides: constraintSettings.MixedDisplayOverride?,
+}
 return function(props)
 	local layoutOrder = props.LayoutOrder
 
-	local constraintsState, setConstraintState = React.useState({
+	local constraintsState: ConstraintsState, setConstraintState = React.useState({
 		disabled = true,
-		constraints = {},
-		defaultOverrides = {},
-	})
+		settings = {},
+		overrides = {},
+	} :: ConstraintsState)
 
 	React.useEffect(function()
-		local constraintSettingsChangedConnection = settingsHelper.constraintSettingsChanged:Connect(
-			function(isSelectionValid, constraints, defaultOverrides)
+		local settingsChangedConnection = settingsHelper.selectionSettingsChanged:Connect(
+			function(selectionSettings: settingsHelper.SelectionSettings?, displayOverrides: settingsHelper.DisplayOverrides?)
+				local constraintSettings = selectionSettings and selectionSettings.constraintSettings
+				local overrides = displayOverrides and displayOverrides.constraintSettings
+
 				setConstraintState({
-					disabled = not isSelectionValid,
-					constraints = constraints,
-					defaultOverrides = defaultOverrides,
+					disabled = constraintSettings == nil,
+					settings = constraintSettings,
+					overrides = overrides,
 				})
 			end
 		)
 
 		return function()
-			constraintSettingsChangedConnection:Disconnect()
+			settingsChangedConnection:Disconnect()
 		end
 	end, {})
 
-	local disabled, constraints, defaultOverrides =
-		constraintsState.disabled, constraintsState.constraints, constraintsState.defaultOverrides
+	local settings = constraintsState.settings
+	local overrides = constraintsState.overrides
+	local disabled = constraintsState.disabled
 
-	return e(labeledSettingsPanel, {
+	return e("Frame", {
+		BackgroundTransparency = 1,
+		AutomaticSize = Enum.AutomaticSize.Y,
+		Size = UDim2.new(1, 0, 0, 0),
 		LayoutOrder = layoutOrder,
-		settingComponents = {
-			{
-				LabelText = "X Constraint",
-				element = StudioComponents.Dropdown,
-				props = getConstraintSettingProps("x", disabled, constraints, defaultOverrides),
+		Visible = not disabled,
+	}, {
+		e(labeledSettingsPanel, {
+			LayoutOrder = layoutOrder,
+			Visible = not disabled,
+
+			settingComponents = {
+				{
+					LabelText = "X Constraint",
+					element = StudioComponents.Dropdown,
+					props = getConstraintSettingProps("x", settings, overrides),
+				},
+				{
+					LabelText = "Y Constraint",
+					element = StudioComponents.Dropdown,
+					props = getConstraintSettingProps("y", settings, overrides),
+				},
+				{
+					LabelText = "Z Constraint",
+					element = StudioComponents.Dropdown,
+					props = getConstraintSettingProps("z", settings, overrides),
+				},
 			},
-			{
-				LabelText = "Y Constraint",
-				element = StudioComponents.Dropdown,
-				props = getConstraintSettingProps("y", disabled, constraints, defaultOverrides),
-			},
-			{
-				LabelText = "Z Constraint",
-				element = StudioComponents.Dropdown,
-				props = getConstraintSettingProps("z", disabled, constraints, defaultOverrides),
-			},
-		},
+		}),
 	})
 end

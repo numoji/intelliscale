@@ -1,152 +1,155 @@
 --!strict
-local packages = script.Parent.Parent.Parent.Packages
-local React = require(packages.React)
-local StudioComponents = require(packages.StudioComponents)
+local React = require(script.Parent.Parent.Parent.Packages.React)
+local StudioComponents = require(script.Parent.Parent.Parent.Packages.StudioComponents)
 
-local source = script.Parent.Parent
-local attributeHelper = require(source.utility.attributeHelper)
-local changeHistoryHelper = require(source.utility.changeHistoryHelper)
-local selectionHelper = require(source.utility.selectionHelper)
-local settingsHelper = require(source.utility.settingsHelper)
-local types = require(source.types)
+local repeatSettings = require(script.Parent.Parent.utility.settingsHelper.repeatSettings)
+local settingsHelper = require(script.Parent.Parent.utility.settingsHelper)
+local types = require(script.Parent.Parent.types)
 
-local components = script.Parent
-local labeledSettingsPanel = require(components.labeledSettingsPanel)
+local labeledSettingsPanel = require(script.Parent.labeledSettingsPanel)
 
 local e = React.createElement
 
-local function setSelectionAttribute(attribute, value)
-	changeHistoryHelper.recordUndoChange(function()
-		for _, instance in selectionHelper.getContainedAndContainerSelection() do
-			attributeHelper.setAttribute(instance, attribute, value)
-		end
-	end)
-end
-
-local function getSettingSetter(axis: types.AxisString, settingName: string)
-	return function(newValue)
-		changeHistoryHelper.recordUndoChange(function()
-			for _, instance in selectionHelper.getContainedAndContainerSelection() do
-				if newValue == nil then
-					local currentValue = instance:GetAttribute(axis .. settingName)
-					newValue = not currentValue
-				end
-
-				attributeHelper.setAttribute(instance, axis .. settingName, newValue)
-			end
-		end)
-	end
-end
-
 type RepeatState = {
 	disabled: boolean,
-	repeatSettings: settingsHelper.RepeatSettings,
-	defaultOverrides: settingsHelper.RepeatDefaultOverrides,
+	settings: repeatSettings.MultipleSettingGroups?,
+	overrides: repeatSettings.MixedDisplayOverride?,
 }
 
-function repeatAxisSettings(props)
-	local axis = props.axis :: types.AxisString
-	local layoutOrder = props.LayoutOrder
-
-	local repeatState: RepeatState, setRepeatState = React.useState({
-		disabled = true,
-		repeatSettings = {},
-		defaultOverrides = {},
-	})
-
-	React.useEffect(function()
-		local repeatSettingsChangedConnection = settingsHelper.repeatSettingsChanged:Connect(
-			function(isSelectionValid, repeats, defaultOverrides)
-				setRepeatState({
-					disabled = not isSelectionValid,
-					repeatSettings = repeats[axis] or {},
-					defaultOverrides = defaultOverrides[axis] or {},
-				})
-			end
-		)
-
-		return function()
-			repeatSettingsChangedConnection:Disconnect()
-		end
-	end, {})
-
-	local repeats = repeatState.repeatSettings
-	local defaultOverrides = repeatState.defaultOverrides
-	local disabled = repeatState.disabled
-
-	local settingComponents: { any } = {}
-	table.insert(settingComponents, {
+local function addLabeledSettingComponents(
+	axis: types.AxisString,
+	axisSettings: repeatSettings.MultipleAxisSetting?,
+	axisOverrides: repeatSettings.MixedDisplayOverrideAxis?,
+	components: { any }
+)
+	table.insert(components, {
 		LabelText = string.upper(axis) .. " Repeat Kind",
 		element = StudioComponents.Dropdown,
 		props = {
 			Items = { "To Extents", "Fixed Amount" },
 			ClearButton = true,
 			Size = UDim2.new(1, 0, 0, StudioComponents.Constants.DefaultDropdownHeight),
-			DefaultText = defaultOverrides.repeatKind or "None",
-			Disabled = disabled,
-			SelectedItem = repeats.repeatKind,
+			DefaultText = axisOverrides and axisOverrides.settingValue or "None",
+			SelectedItem = axisSettings and axisSettings.settingValue,
 			OnItemSelected = function(newItem)
-				setSelectionAttribute(axis .. "RepeatKind", newItem)
 				if newItem == nil then
-					setSelectionAttribute(axis .. "StretchToFit", nil)
-					setSelectionAttribute(axis .. "RepeatAmountPositive", nil)
-					setSelectionAttribute(axis .. "RepeatAmountNegative", nil)
+					settingsHelper.setSelectionAttributes({
+						[(axis .. "RepeatKind") :: types.SettingAttribute] = settingsHelper.None,
+						[(axis .. "StretchToFit") :: types.SettingAttribute] = settingsHelper.None,
+						[(axis .. "RepeatAmountPositive") :: types.SettingAttribute] = settingsHelper.None,
+						[(axis .. "RepeatAmountNegative") :: types.SettingAttribute] = settingsHelper.None,
+					})
+				else
+					settingsHelper.setSelectionAttribute((axis .. "RepeatKind") :: types.SettingAttribute, newItem)
 				end
 			end,
 		},
 	})
 
-	if repeats.showExtentsSettings then
-		table.insert(settingComponents, {
+	if not axisSettings then
+		return components
+	end
+
+	if axisSettings.settingValue == "To Extents" or axisSettings.settingValue == "~" then
+		table.insert(components, {
 			LabelText = "Stretch to Fit",
 			element = StudioComponents.Checkbox,
 			props = {
 				Size = UDim2.new(1, 0, 0, StudioComponents.Constants.DefaultToggleHeight),
 				Label = "",
 				ButtonAlignment = Enum.HorizontalAlignment.Right,
-				Value = if repeats.stretchToFit ~= "~" then repeats.stretchToFit or false else nil,
-				Disabled = disabled,
-				OnChanged = getSettingSetter(axis :: types.AxisString, "StretchToFit"),
+				Value = if axisSettings.settingValue ~= "~" then axisSettings.childrenSettings.stretchToFit else nil,
+				OnChanged = function()
+					settingsHelper.setSelectionAttribute(
+						(axis .. "StretchToFit") :: types.SettingAttribute,
+						if axisSettings.settingValue ~= "~" then not axisSettings.childrenSettings.stretchToFit else false
+					)
+				end,
 			},
 		})
 	end
 
-	if repeats.showFixedSettings then
-		table.insert(settingComponents, {
+	if axisSettings.settingValue == "Fixed Amount" or axisSettings.settingValue == "~" then
+		table.insert(components, {
 			LabelText = string.upper(axis) .. "+",
 			element = StudioComponents.NumericInput,
 			props = {
 				Size = UDim2.new(1, 0, 0, StudioComponents.Constants.DefaultInputHeight),
-				PlaceholderText = defaultOverrides.repeatAmountPositive,
-				Value = if repeats.repeatAmountPositive ~= "~" then repeats.repeatAmountPositive or 0 else nil,
+				PlaceholderText = if axisSettings.childrenSettings.repeatAmountPositive == "~" then "-" else nil,
+				Value = if axisSettings.childrenSettings.repeatAmountPositive ~= "~"
+					then axisSettings.childrenSettings.repeatAmountPositive
+					else nil,
 				Min = 0,
 				Arrows = true,
-				Disabled = disabled,
-				OnValidChanged = getSettingSetter(axis :: types.AxisString, "RepeatAmountPositive"),
+				OnValidChanged = settingsHelper.createAttributeSetter((axis .. "RepeatAmountPositive") :: types.SettingAttribute),
 			},
 		})
 
-		table.insert(settingComponents, {
+		table.insert(components, {
 			LabelText = string.upper(axis) .. "-",
 			element = StudioComponents.NumericInput,
 			props = {
 				Size = UDim2.new(1, 0, 0, StudioComponents.Constants.DefaultInputHeight),
-				PlaceholderText = defaultOverrides.repeatAmountPositive,
-				Value = if repeats.repeatAmountNegative ~= "~" then repeats.repeatAmountNegative or 0 else nil,
+				PlaceholderText = if axisSettings.childrenSettings.repeatAmountPositive == "~" then "-" else nil,
+				Value = if axisSettings.childrenSettings.repeatAmountNegative ~= "~"
+					then axisSettings.childrenSettings.repeatAmountNegative
+					else nil,
 				Min = -math.huge,
 				Max = 0,
 				Arrows = true,
-				Disabled = disabled,
-				OnValidChanged = getSettingSetter(axis :: types.AxisString, "RepeatAmountNegative"),
+				OnValidChanged = settingsHelper.createAttributeSetter((axis .. "RepeatAmountNegative") :: types.SettingAttribute),
 			},
 		})
 	end
+
+	return components
+end
+
+function repeatsPanel(props)
+	local layoutOrder = props.LayoutOrder
+
+	local repeatState: RepeatState, setRepeatState = React.useState({
+		disabled = true,
+		settings = nil,
+		overrides = nil,
+	} :: RepeatState)
+
+	React.useEffect(function()
+		local settingsChangedConnection = settingsHelper.selectionSettingsChanged:Connect(
+			function(selectionSettings: settingsHelper.SelectionSettings?, displayOverrides: settingsHelper.DisplayOverrides?)
+				local repeatSettings = selectionSettings and selectionSettings.repeatSettings
+				local overrides = displayOverrides and displayOverrides.repeatSettings
+
+				local state: RepeatState = {
+					disabled = repeatSettings == nil,
+					settings = repeatSettings,
+					overrides = overrides,
+				}
+
+				setRepeatState(state)
+			end
+		)
+
+		return function()
+			settingsChangedConnection:Disconnect()
+		end
+	end, {})
+
+	local disabled = repeatState.disabled
+	local settings = repeatState.settings
+	local overrides = repeatState.overrides
+
+	local settingComponents: { any } = {}
+	addLabeledSettingComponents("x", settings and settings.x, overrides and overrides.x or nil, settingComponents)
+	addLabeledSettingComponents("y", settings and settings.y, overrides and overrides.y or nil, settingComponents)
+	addLabeledSettingComponents("z", settings and settings.z, overrides and overrides.z or nil, settingComponents)
 
 	return e("Frame", {
 		BackgroundTransparency = 1,
 		AutomaticSize = Enum.AutomaticSize.Y,
 		Size = UDim2.new(1, 0, 0, 0),
 		LayoutOrder = layoutOrder,
+		Visible = not disabled,
 	}, {
 		e(labeledSettingsPanel, {
 			Position = UDim2.fromOffset(0, 0),
@@ -154,33 +157,6 @@ function repeatAxisSettings(props)
 		}),
 	})
 end
-repeatAxisSettings = React.memo(repeatAxisSettings)
-
-local function repeatsPanel(props)
-	return e("Frame", {
-		BackgroundTransparency = 1,
-		AutomaticSize = Enum.AutomaticSize.Y,
-		Size = UDim2.new(1, 0, 0, 0),
-		LayoutOrder = props.LayoutOrder,
-	}, {
-		e("UIListLayout", {
-			SortOrder = Enum.SortOrder.LayoutOrder,
-			FillDirection = Enum.FillDirection.Vertical,
-			Padding = UDim.new(0, 4),
-		}),
-		e(repeatAxisSettings, {
-			axis = "x",
-			LayoutOrder = 0,
-		}),
-		e(repeatAxisSettings, {
-			axis = "y",
-			LayoutOrder = 1,
-		}),
-		e(repeatAxisSettings, {
-			axis = "z",
-			LayoutOrder = 2,
-		}),
-	})
-end
+repeatsPanel = React.memo(repeatsPanel)
 
 return repeatsPanel

@@ -1,23 +1,24 @@
 --!strict
-local PhysicsService = game:GetService("PhysicsService")
 local Selection = game:GetService("Selection")
 local containerHelper = {}
 
-function containerHelper.registerCollisionGroup()
-	PhysicsService:RegisterCollisionGroup("IntelliscaleUnselectable")
-
-	if not PhysicsService:IsCollisionGroupRegistered("StudioSelectable") then
-		PhysicsService:RegisterCollisionGroup("StudioSelectable")
-	end
-
-	PhysicsService:CollisionGroupSetCollidable("IntelliscaleUnselectable", "StudioSelectable", false)
-
-	return function()
-		PhysicsService:UnregisterCollisionGroup("IntelliscaleUnselectable")
-	end
+function containerHelper.isValidContainer(instance: Instance)
+	return instance:IsA("BasePart")
 end
 
-function containerHelper.makeContainer(model)
+function containerHelper.isValidContained(instance: Instance)
+	return instance:IsA("BasePart") and instance.Parent ~= nil and instance.Parent:IsA("BasePart")
+end
+
+function containerHelper.isValidContainedOrContainer(instance: Instance)
+	return containerHelper.isValidContainer(instance) or containerHelper.isValidContained(instance)
+end
+
+function containerHelper.doesContainAnyParts(instance: Instance)
+	return instance:IsA("BasePart") and instance:FindFirstChildWhichIsA("BasePart") ~= nil
+end
+
+function containerHelper.makeContainer(model: Model)
 	local boundingBoxPart = Instance.new("Part")
 	if model.Name == "Model" then
 		boundingBoxPart.Name = "Container"
@@ -39,7 +40,6 @@ function containerHelper.makeContainer(model)
 
 	model.Parent = nil
 
-	-- boundingBoxPart.CollisionGroup = "IntelliscaleUnselectable"
 	boundingBoxPart:SetAttribute("isContainer", true)
 
 	Selection:Set({ boundingBoxPart })

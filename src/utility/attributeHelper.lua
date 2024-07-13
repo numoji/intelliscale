@@ -1,9 +1,16 @@
 --!strict
 local Players = game:GetService("Players")
+
+local changeDeduplicator = require(script.Parent.changeDeduplicator)
 local attributeHelper = {}
 
-function attributeHelper.setAttribute(instance: Instance, attribute: string, value: any, shouldPrint: boolean?)
-	instance:SetAttribute(attribute, value)
+function attributeHelper.setAttribute(instance: Instance, attribute: string, value: any, extraLevel: number?, useDeduplicator: boolean?)
+	if useDeduplicator then
+		local callingName = debug.info(2 + (extraLevel or 0), "s"):match("%a+$")
+		changeDeduplicator.setAtt(callingName, instance, attribute, value, extraLevel)
+	else
+		instance:SetAttribute(attribute, value)
+	end
 
 	if Players.LocalPlayer then
 		instance:SetAttribute("_intelliscale_lastChangeBy", game.Players.LocalPlayer.UserId)

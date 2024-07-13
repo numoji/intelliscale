@@ -1,15 +1,20 @@
 --!strict
-local packages = script.Parent.Parent.Packages
-local Janitor = require(packages.Janitor)
+local RunService = game:GetService("RunService")
 
-local source = script.Parent
-local changeHistoryHelper = require(source.utility.changeHistoryHelper)
-local mathUtil = require(source.utility.mathUtil)
-local repeating = require(source.repeating)
-local scaling = require(source.scaling)
-local selectionHelper = require(source.utility.selectionHelper)
-local studioHandlesStalker = require(source.utility.studioHandlesStalker)
-local types = require(source.types)
+local Janitor = require(script.Parent.Parent.Packages.Janitor)
+
+local changeDeduplicator = require(script.Parent.utility.changeDeduplicator)
+local changeHistoryHelper = require(script.Parent.utility.changeHistoryHelper)
+local containerHelper = require(script.Parent.utility.containerHelper)
+local mathUtil = require(script.Parent.utility.mathUtil)
+local realTransform = require(script.Parent.utility.realTransform)
+local repeatSettings = require(script.Parent.utility.settingsHelper.repeatSettings)
+local repeating = require(script.Parent.repeating)
+local scaling = require(script.Parent.scaling)
+local selectionHelper = require(script.Parent.utility.selectionHelper)
+local sizeSettings = require(script.Parent.utility.settingsHelper.sizeSettings)
+local studioHandlesStalker = require(script.Parent.utility.studioHandlesStalker)
+local types = require(script.Parent.types)
 local changeCatcher = {}
 
 local janitor = Janitor.new()
@@ -34,14 +39,14 @@ local function cacheSelectionInitialProps(selection: { Instance })
 	for _, instance in pairs(selection) do
 		local realInstance = selectionHelper.getRealInstance(instance)
 
-		if selectionHelper.isValidContainedOrContainer(realInstance) and realInstance:IsA("BasePart") and instance:IsA("BasePart") then
-			if selectionHelper.isValidContained(realInstance) then
+		if containerHelper.isValidContainedOrContainer(realInstance) and realInstance:IsA("BasePart") and instance:IsA("BasePart") then
+			if containerHelper.isValidContained(realInstance) then
 				-- We only need to catch non-orthagonal rotations if the part is
 				-- inside a container
 				table.insert(rotationCatching, instance)
 			end
 
-			if instance ~= realInstance or repeating.doesPartHaveAnyRepeatSettings(realInstance) then
+			if instance ~= realInstance or repeatSettings.doesHaveAnyRepeatSettings(realInstance) then
 				initialProps.cframes[instance] = instance.CFrame
 				initialProps.sizes[instance] = instance.Size
 				continue
@@ -109,9 +114,11 @@ local function updateCFrame(part: BasePart, previousCFrame: CFrame): boolean
 	local realPart = selectionHelper.getRealInstance(part) :: BasePart
 
 	if not mathUtil.cframeFuzzyEq(previousCFrame, part.CFrame) then
-		if part ~= realPart then
-			local deltaCFrame = previousCFrame:ToObjectSpace(part.CFrame)
-			scaling.cframeChildrenRecursive(realPart, deltaCFrame, true, true)
+		local deltaCFrame = previousCFrame:ToObjectSpace(part.CFrame)
+		if part ~= realPart or realTransform.hasTransform(realPart) then
+			scaling.cframeRecursive(realPart, deltaCFrame, true, true)
+		elseif repeating.isFolderUnselected(realPart) then
+			scaling.updateChildrenCFrames(repeating.getFolder(realPart), part.CFrame, previousCFrame)
 		end
 		return true
 	end
@@ -165,12 +172,14 @@ function changeCatcher.finishCatching()
 	end
 
 	for _, part in deferredRepeatingUpdates do
-		if selectionHelper.isValidContained(part) then
+		if containerHelper.isValidContained(part) then
 			repeating.updateRepeat(part)
 		end
 	end
 	isCatching = false
 end
+
+local fauxPartChangedTo = {}
 
 function changeCatcher.initialize(plugin: Plugin)
 	studioHandlesStalker.handlesPressed:Connect(function()
@@ -186,7 +195,7 @@ function changeCatcher.initialize(plugin: Plugin)
 		changeHistoryHelper.stopAppending()
 	end)
 
-	selectionHelper.bindToEitherSelection(function(selection, fauxSelection)
+	selectionHelper.addSelectionChangeCallback(selectionHelper.callbackDicts.containerOrContained, function(_, fauxSelection)
 		if isCatching then
 			return
 		end
@@ -200,48 +209,68 @@ function changeCatcher.initialize(plugin: Plugin)
 		rotationCatching = {}
 	end)
 
-	selectionHelper.bindToAnyEitherChanged(function(changedInstance, selection, fauxSelection)
-		local realInstance = selectionHelper.getRealInstance(changedInstance)
+	selectionHelper.addPropertyChangeCallback(
+		selectionHelper.callbackDicts.containerOrContained,
+		{ "CFrame", "Size" },
+		function(changedInstance, selection, fauxSelection, fromString: any)
+			local realInstance = selectionHelper.getRealInstance(changedInstance)
+			if not (changedInstance:IsA("BasePart") and realInstance:IsA("BasePart")) then
+				return
+			end
 
-		if isCatching and not realInstance:GetAttribute("UpdateChildrenContinuously") then
-			return
-		end
+			if selectionHelper.fauxPartByPart[changedInstance] then
+				local fauxPart = selectionHelper.fauxPartByPart[changedInstance]
+				local realSize, realCFrame = realTransform.getSizeAndGlobalCFrame(changedInstance)
 
-		if not changedInstance:IsA("BasePart") then
-			return
-		end
+				if fauxPart.Size ~= realSize or fauxPart.CFrame ~= realCFrame then
+					changeDeduplicator.setProp("scaling", fauxPart, "Size", realSize)
+					changeDeduplicator.setProp("scaling", fauxPart, "CFrame", realCFrame)
+				end
+			end
 
-		if selectionHelper.isValidContained(changedInstance) then
-			orthonormalizePart(changedInstance)
-		end
+			if not changeDeduplicator.isChanged("scaling", changedInstance) then
+				return
+			end
 
-		local repeatUpdates = {}
+			local sizeSettingGroup = sizeSettings.getSettingGroup(changedInstance)
+			if isCatching and not (sizeSettingGroup and sizeSettingGroup.updateContinuous) then
+				return
+			end
 
-		if initialProps.sizes[changedInstance] then
-			local didUpdateSize = updateSize(changedInstance, initialProps.sizes[changedInstance], repeatUpdates)
+			if containerHelper.isValidContained(changedInstance) then
+				orthonormalizePart(changedInstance)
+			end
 
-			if didUpdateSize then
-				initialProps.sizes[changedInstance] = changedInstance.Size
+			local repeatUpdates = {}
+
+			if initialProps.sizes[changedInstance] then
+				local didUpdateSize = updateSize(changedInstance, initialProps.sizes[changedInstance], repeatUpdates)
+
+				if didUpdateSize then
+					initialProps.sizes[changedInstance] = changedInstance.Size
+					initialProps.cframes[changedInstance] = changedInstance.CFrame
+					fauxPartChangedTo[changedInstance] = nil
+					table.insert(repeatUpdates, realInstance)
+				end
+			end
+
+			if initialProps.cframes[changedInstance] then
+				local didUpdateCFrame = updateCFrame(changedInstance, initialProps.cframes[changedInstance])
+				if didUpdateCFrame then
+					fauxPartChangedTo[changedInstance] = nil
+					table.insert(repeatUpdates, realInstance)
+				end
+
 				initialProps.cframes[changedInstance] = changedInstance.CFrame
 			end
-		end
 
-		if initialProps.cframes[changedInstance] then
-			local didUpdateCFrame = updateCFrame(changedInstance, initialProps.cframes[changedInstance])
-			if didUpdateCFrame then
-				local realPart = selectionHelper.getRealInstance(changedInstance) :: BasePart
-				table.insert(repeatUpdates, realPart)
-			end
-
-			initialProps.cframes[changedInstance] = changedInstance.CFrame
-		end
-
-		for _, part in repeatUpdates do
-			if selectionHelper.isValidContained(part) then
-				repeating.updateRepeat(part)
+			for _, part in repeatUpdates do
+				if containerHelper.isValidContained(part) then
+					repeating.updateRepeat(part)
+				end
 			end
 		end
-	end)
+	)
 
 	return janitor
 end

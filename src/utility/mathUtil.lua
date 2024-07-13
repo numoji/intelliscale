@@ -1,7 +1,8 @@
 --!strict
-local epsilon = 1e-5
-
 local mathUtil = {}
+
+local epsilon = 1e-5
+mathUtil.epsilon = epsilon
 
 function mathUtil.fuzzyEq(a: number, b: number): boolean
 	return math.abs(a - b) < epsilon

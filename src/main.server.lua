@@ -1,36 +1,23 @@
 --!strict
-local packages = script.Parent.Parent.Packages
-local Janitor = require(packages.Janitor)
-local React = require(packages.React)
-local ReactRoblox = require(packages.ReactRoblox)
-local StudioComponents = require(packages.StudioComponents)
+local Players = game:GetService("Players")
+
+local Janitor = require(script.Parent.Parent.Packages.Janitor)
+local React = require(script.Parent.Parent.Packages.React)
+local ReactRoblox = require(script.Parent.Parent.Packages.ReactRoblox)
+local StudioComponents = require(script.Parent.Parent.Packages.StudioComponents)
 local selectThrough = require(script.Parent.selectThrough)
 
-local source = script.Parent
-local changeCatcher = require(source.changeCatcher)
-local containerHelper = require(source.utility.containerHelper)
-local initializePluginActions = require(source.initializePluginActions)
-local repeating = require(source.repeating)
-local scaling = require(source.scaling)
-local selectionDisplay = require(source.selectionDisplay)
-local selectionHelper = require(source.utility.selectionHelper)
-local settingsHelper = require(source.utility.settingsHelper)
-local studioHandlesStalker = require(source.utility.studioHandlesStalker)
+local changeCatcher = require(script.Parent.changeCatcher)
+local pluginActions = require(script.Parent.pluginActions)
+local repeating = require(script.Parent.repeating)
+local selectionDisplay = require(script.Parent.selectionDisplay)
+local selectionHelper = require(script.Parent.utility.selectionHelper)
+local settingsHelper = require(script.Parent.utility.settingsHelper)
+local studioHandlesStalker = require(script.Parent.utility.studioHandlesStalker)
 
-local widgetApp = require(source.components.widgetApp)
+local widgetApp = require(script.Parent.components.widgetApp)
 
 local janitor = Janitor.new()
-
-janitor:Add(changeCatcher.initialize(plugin))
-janitor:Add(containerHelper.registerCollisionGroup())
-janitor:Add(initializePluginActions(plugin))
-janitor:Add(repeating.initializeRepeating())
-janitor:Add(scaling.initializeHandles(plugin))
-janitor:Add(selectionDisplay.initializeHighlightContainer())
-janitor:Add(selectionHelper.jantior)
-janitor:Add(selectThrough.initialize())
-janitor:Add(settingsHelper.stopListening)
-janitor:Add(studioHandlesStalker.initialize())
 
 local toolbar = plugin:CreateToolbar("Intelliscale")
 local toggleWidgetButton = toolbar:CreateButton("Intelliscale", "Toggle widget", "")
@@ -44,10 +31,17 @@ widget.Title = "Intelliscale"
 
 function updateWidgetButton()
 	if widget.Enabled then
-		settingsHelper.listenForChanges()
+		janitor:Add(changeCatcher.initialize(plugin), "Cleanup")
+		janitor:Add(pluginActions.initialize(plugin), "Cleanup")
+		janitor:Add(repeating.initialize(), "Cleanup")
+		janitor:Add(selectionDisplay.initialize(), "Cleanup")
+		janitor:Add(selectionHelper.initialize(), "Cleanup")
+		janitor:Add(selectThrough.initialize())
+		janitor:Add(settingsHelper.listenForChanges(), "Cleanup")
+		janitor:Add(studioHandlesStalker.initialize(), "Cleanup")
 		toggleWidgetButton:SetActive(true)
 	else
-		settingsHelper.stopListening()
+		janitor:Cleanup()
 		toggleWidgetButton:SetActive(false)
 	end
 end
@@ -61,10 +55,17 @@ end)
 local root = ReactRoblox.createRoot(widget)
 root:render(React.createElement(StudioComponents.PluginProvider, { Plugin = plugin }, { React.createElement(widgetApp) }))
 
-plugin.Unloading:Connect(function()
+local function cleanup()
 	root:unmount()
 	janitor:Cleanup()
-end)
+end
+
+plugin.Unloading:Connect(cleanup)
+
+if not Players.LocalPlayer then
+	game:BindToClose(cleanup)
+else
+end
 
 task.wait()
 task.wait()

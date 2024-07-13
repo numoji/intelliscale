@@ -1,23 +1,13 @@
 --!strict
-local CoreGui = game:GetService("CoreGui")
-local packages = script.Parent.Parent.Packages
-local Janitor = require(packages.Janitor)
+local changeDeduplicator = require(script.Parent.utility.changeDeduplicator)
+local constraintSettings = require(script.Parent.utility.settingsHelper.constraintSettings)
+local containerHelper = require(script.Parent.utility.containerHelper)
+local geometryHelper = require(script.Parent.utility.geometryHelper)
+local mathUtil = require(script.Parent.utility.mathUtil)
+local realTransform = require(script.Parent.utility.realTransform)
+local types = require(script.Parent.types)
 
-local epsilon = 1e-5
-
-local source = script.Parent
-local changeHistoryHelper = require(source.utility.changeHistoryHelper)
-local geometryHelper = require(source.utility.geometryHelper)
-local mathUtil = require(source.utility.mathUtil)
-local realTransform = require(source.utility.realTransform)
-local selectionHelper = require(source.utility.selectionHelper)
-local types = require(source.types)
-
-local janitor = Janitor.new()
 local scaling = {}
-
-local partScaledWithHandlesEvent = janitor:Add(Instance.new("BindableEvent"))
-scaling.partScaledWithHandles = partScaledWithHandlesEvent.Event
 
 type ScaleFunctionsMap = {
 	[types.ConstraintString]: (Enum.Axis, BasePart, Vector3) -> (CFrame, Vector3),
@@ -70,7 +60,7 @@ local scaleFunctionsMap: ScaleFunctionsMap = {
 	Scale = function(axisEnum, partToScale, newParentSize: Vector3)
 		local axis = geometryHelper.axisByEnum[axisEnum]
 
-		local positionInAxis, sizeInAxis, relativeAxis, sign = geometryHelper.getPositionAndSizeInParentAxis(axis, partToScale)
+		local positionInAxis, sizeInAxis, relativeAxis = geometryHelper.getPositionAndSizeInParentAxis(axis, partToScale)
 
 		local parent = partToScale.Parent :: BasePart
 		local parentSizeScalar = newParentSize:Dot(axis) / parent.Size:Dot(axis)
@@ -95,7 +85,7 @@ function scaling.moveChildrenRecursive(deltaPosition: Vector3, part: BasePart)
 	part.Position += deltaPosition
 end
 
-function scaling.cframeChildrenRecursive(
+function scaling.cframeRecursive(
 	part: BasePart,
 	deltaCFrame: CFrame?,
 	shouldWriteToAttribute: boolean?,
@@ -105,7 +95,7 @@ function scaling.cframeChildrenRecursive(
 )
 	local currentCFrame = part.CFrame
 	local shouldUseAttribute = false
-	if shouldWriteToAttribute and selectionHelper.isValidContained(part) and realTransform.hasCFrame(part) then
+	if shouldWriteToAttribute and containerHelper.isValidContained(part) and realTransform.hasCFrame(part) then
 		currentCFrame = realTransform.getGlobalCFrame(part, parentCFrame)
 		shouldUseAttribute = true
 	end
@@ -124,17 +114,34 @@ function scaling.cframeChildrenRecursive(
 
 	for _, child in part:GetChildren() do
 		if child:IsA("BasePart") then
-			scaling.cframeChildrenRecursive(child, nil, true, true, newCFrame, currentCFrame)
+			scaling.cframeRecursive(child, nil, true, true, newCFrame, currentCFrame)
 		elseif child:IsA("Folder") and shouldMoveRepeats then
 			for _, folderChild in child:GetChildren() do
 				if folderChild:IsA("BasePart") then
-					scaling.cframeChildrenRecursive(folderChild, nil, true, true, newCFrame, currentCFrame)
+					scaling.cframeRecursive(folderChild, nil, true, true, newCFrame, currentCFrame)
 				end
 			end
 		end
 	end
 
-	part.CFrame = newCFrame
+	changeDeduplicator.setProp("scaling", part, "CFrame", newCFrame)
+end
+
+function scaling.updateChildrenCFrames(instance: Instance, newParentCFrame: CFrame, parentCFrame: CFrame)
+	for _, child in instance:GetChildren() do
+		if child:IsA("BasePart") then
+			local newCFrame = newParentCFrame * parentCFrame:ToObjectSpace(child.CFrame)
+			local currentCFrame = child.CFrame
+
+			scaling.cframeRecursive(child, nil, true, true, newCFrame, currentCFrame)
+		elseif child:IsA("Folder") then
+			for _, folderChild in child:GetChildren() do
+				if folderChild:IsA("BasePart") then
+					scaling.cframeRecursive(folderChild, nil, true, true, newParentCFrame, parentCFrame)
+				end
+			end
+		end
+	end
 end
 
 function scaling.moveAndScaleChildrenRecursive(
@@ -157,7 +164,8 @@ function scaling.moveAndScaleChildrenRecursive(
 			local totalRelativeDeltaCFrame = CFrame.identity
 			local totalDeltaSize = Vector3.zero
 			for _, axis: types.AxisString in axes do
-				local constraint = child:GetAttribute(`{axis}Constraint`) or "Scale"
+				local constraintSettings = constraintSettings.getSettingGroup(child) :: constraintSettings.SingleSettingGroup
+				local constraint = constraintSettings[axis]
 				local constraintType: types.ConstraintString = geometryHelper.constraintMap[constraint]
 
 				local scaleFunction = scaleFunctionsMap[constraintType]
@@ -168,7 +176,7 @@ function scaling.moveAndScaleChildrenRecursive(
 				totalDeltaSize += deltaSize
 			end
 
-			if totalRelativeDeltaCFrame.Position.Magnitude < epsilon then
+			if mathUtil.fuzzyEq(totalRelativeDeltaCFrame.Position.Magnitude, mathUtil.epsilon) then
 				totalRelativeDeltaCFrame = CFrame.identity
 			end
 
@@ -178,105 +186,15 @@ function scaling.moveAndScaleChildrenRecursive(
 			local newChildSize = size + totalDeltaSize
 
 			if totalDeltaSize == Vector3.zero then
-				scaling.cframeChildrenRecursive(child, childCFrame:ToObjectSpace(newChildCFrame), true, true, newCFrame)
+				scaling.cframeRecursive(child, childCFrame:ToObjectSpace(newChildCFrame), true, true, newCFrame)
 			else
 				scaling.moveAndScaleChildrenRecursive(child, newChildSize, newChildCFrame, axes, changedList, true, newCFrame)
 			end
 		end
 	end
 
-	part.Size = newSize
-	part.CFrame = newCFrame
-end
-
-local scalingHandles
-function scaling.initializeHandles(plugin)
-	scalingHandles = janitor:Add(Instance.new("Handles"))
-	scalingHandles.Color3 = Color3.fromHex("#f69fd6")
-	scalingHandles.Style = Enum.HandlesStyle.Resize
-	scalingHandles.Visible = false
-	scalingHandles.Parent = CoreGui
-	scalingHandles.Transparency = 0.5
-	scalingHandles.Archivable = false
-
-	local mouse = plugin:GetMouse()
-
-	local enterIcon = ""
-	local isMouseDown = false
-
-	scalingHandles.MouseEnter:Connect(function()
-		if not isMouseDown then
-			mouse.Icon = "rbxasset://SystemCursors/OpenHand"
-		end
-		enterIcon = "rbxasset://SystemCursors/OpenHand"
-	end)
-
-	scalingHandles.MouseLeave:Connect(function()
-		if not isMouseDown then
-			mouse.Icon = ""
-		end
-		enterIcon = ""
-	end)
-
-	local beginningSize
-	local currentSize
-	scalingHandles.MouseButton1Down:Connect(function(face: Enum.NormalId)
-		local scalingPart = scalingHandles.Adornee :: BasePart
-		beginningSize = geometryHelper.getComponent(geometryHelper.axisEnumByNormalIdMap[face], scalingPart.Size)
-		currentSize = beginningSize
-
-		isMouseDown = true
-		mouse.Icon = "rbxasset://SystemCursors/ClosedHand"
-		changeHistoryHelper.startAppendingAfterNextCommit()
-	end)
-
-	scalingHandles.MouseButton1Up:Connect(function()
-		isMouseDown = false
-		mouse.Icon = enterIcon
-		changeHistoryHelper.stopAppending()
-	end)
-
-	scalingHandles.MouseDrag:Connect(function(face: Enum.NormalId, distance: number)
-		local scalingPart = scalingHandles.Adornee :: BasePart
-
-		local newSize = beginningSize + mathUtil.round(distance, plugin.GridSize)
-		if newSize == currentSize or newSize < plugin.GridSize then
-			return
-		end
-
-		local deltaSize = newSize - currentSize
-		local axis = geometryHelper.getAxisFromNormalId(face, CFrame.new())
-
-		local newParentSize = scalingPart.Size + axis:Abs() * deltaSize
-		local newParentCFrame = scalingPart.CFrame * CFrame.new(axis * deltaSize / 2)
-		local axisName: types.AxisString = geometryHelper.axisNameByNormalIdMap[face]
-
-		local changedList = { scalingPart }
-
-		changeHistoryHelper.recordUndoChange(function()
-			scaling.moveAndScaleChildrenRecursive(scalingPart, newParentSize, newParentCFrame, { axisName }, changedList, true)
-		end)
-
-		partScaledWithHandlesEvent:Fire(changedList)
-
-		currentSize = newSize
-	end)
-
-	janitor:Add(function()
-		plugin:GetMouse().Icon = ""
-	end)
-
-	janitor:Add(selectionHelper.bindToSingleContainerSelection(function(selectedPart: BasePart)
-		scalingHandles.Adornee = selectedPart
-	end, function()
-		scalingHandles.Adornee = nil
-	end))
-
-	return janitor
-end
-
-function scaling.toggleHandleVisibility()
-	scalingHandles.Visible = not scalingHandles.Visible
+	changeDeduplicator.setProp("scaling", part, "Size", newSize)
+	changeDeduplicator.setProp("scaling", part, "CFrame", newCFrame)
 end
 
 return scaling
