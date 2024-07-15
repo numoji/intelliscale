@@ -302,7 +302,7 @@ local function getSelectionAndFauxSelection(): (Selection, Selection)
 			fauxPart.Anchored = true
 			fauxPart.CanCollide = false
 			fauxPart.Transparency = 1
-			fauxPart.CollisionGroup = "IntelliscaleUnselectable"
+			-- fauxPart.CollisionGroup = "IntelliscaleUnselectable"
 			fauxPart.Parent = workspace.CurrentCamera
 			fauxPart.Name = "FauxPart"
 
