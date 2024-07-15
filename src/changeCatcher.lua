@@ -1,6 +1,4 @@
 --!strict
-local RunService = game:GetService("RunService")
-
 local Janitor = require(script.Parent.Parent.Packages.Janitor)
 
 local changeDeduplicator = require(script.Parent.utility.changeDeduplicator)
