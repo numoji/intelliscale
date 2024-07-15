@@ -33,8 +33,6 @@ type RepeatVariables = {
 	realSize: Vector3?,
 }
 
-local unselectedInitialFolderParts: { [BasePart]: true } = {}
-
 local function getCachedRepeatVariables(sourcePart: BasePart): RepeatVariables
 	local repeatsFolder = sourcePart:FindFirstChild("__repeats_intelliscale_internal") :: Folder
 	if not repeatsFolder then
@@ -195,18 +193,14 @@ local function flattenInstanceHierarchyRecursive<InstanceType>(instance: Instanc
 	end
 
 	for _, child in instance:GetChildren() do
-		if child:IsA("BasePart") or child:IsA("Folder") then
-			flattenInstanceHierarchyRecursive(child, newParent)
-			if instance.Parent ~= newParent and (child:IsA("BasePart") and child:GetAttribute("isContainer")) or child:IsA("Folder") then
-				child:Destroy()
-			else
-				(child :: Instance).Parent = newParent
-			end
-		end
+		flattenInstanceHierarchyRecursive(child, newParent)
 	end
 
 	if instance:IsA("BasePart") then
 		instance.CollisionGroup = "IntelliscaleUnselectable"
+		instance.Parent = newParent
+	elseif instance:IsA("Folder") or instance:IsA("Model") then
+		instance:Destroy()
 	end
 
 	return instance
@@ -241,7 +235,7 @@ local function reconcileRepeats(
 
 	local flatSource: Instance
 	local hasFlatBeenUsed = false
-	if #sourcePart:GetChildren() > 1 then
+	if sourcePart:FindFirstChildWhichIsA("BasePart") then
 		if repeatsFolder:GetChildren()[1] then
 			hasFlatBeenUsed = true
 			flatSource = repeatsFolder:GetChildren()[1]
@@ -250,10 +244,11 @@ local function reconcileRepeats(
 			(flatSource :: Model).PrimaryPart = flattenInstanceHierarchyRecursive(sourcePart:Clone(), flatSource)
 		end
 	else
-		flatSource = sourcePart:Clone();
+		flatSource = sourcePart:Clone()
+		local flatRepeats = flatSource:FindFirstChild("__repeats_intelliscale_internal") :: Folder;
 		(flatSource :: BasePart).CollisionGroup = "IntelliscaleUnselectable"
-		if #flatSource:GetChildren() > 0 then
-			flatSource:GetChildren()[1]:Destroy()
+		if flatRepeats then
+			flatRepeats:Destroy()
 		end
 	end
 
@@ -379,7 +374,6 @@ function repeating.updateRepeat(sourcePart: BasePart)
 			repeatsFolder = Instance.new("Folder")
 			repeatsFolder.Name = "__repeats_intelliscale_internal"
 			repeatsFolder.Parent = sourcePart
-			unselectedInitialFolderParts[sourcePart] = true
 		end
 	end
 
@@ -482,33 +476,11 @@ function repeating.updateRepeat(sourcePart: BasePart)
 	end
 end
 
-function repeating.isFolderUnselected(part: BasePart)
-	return unselectedInitialFolderParts[part]
-end
-
 function repeating.getFolder(part: BasePart)
 	return part:FindFirstChild("__repeats_intelliscale_internal") :: Folder
 end
 
 function repeating.initialize()
-	janitor:Add(selectionHelper.addSelectionChangeCallback(selectionHelper.callbackDicts.any, function(selection: types.Selection)
-		local selectionSet = {}
-
-		for _, instance in selection do
-			selectionSet[instance] = true
-		end
-
-		for part, _ in unselectedInitialFolderParts do
-			if not selectionSet[part] then
-				unselectedInitialFolderParts[part] = nil
-			end
-		end
-	end))
-
-	janitor:Add(function()
-		unselectedInitialFolderParts = {}
-	end)
-
 	local repeatingAttributes = {
 		"xRepeatKind",
 		"xStretchToFit",

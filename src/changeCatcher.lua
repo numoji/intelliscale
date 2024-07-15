@@ -115,8 +115,6 @@ local function updateCFrame(part: BasePart, previousCFrame: CFrame): boolean
 		local deltaCFrame = previousCFrame:ToObjectSpace(part.CFrame)
 		if part ~= realPart or realTransform.hasTransform(realPart) then
 			scaling.cframeRecursive(realPart, deltaCFrame, true, true)
-		elseif repeating.isFolderUnselected(realPart) then
-			scaling.updateChildrenCFrames(repeating.getFolder(realPart), part.CFrame, previousCFrame)
 		end
 		return true
 	end
@@ -230,12 +228,12 @@ function changeCatcher.initialize(plugin: Plugin)
 				return
 			end
 
-			local sizeSettingGroup = sizeSettings.getSettingGroup(changedInstance)
+			local sizeSettingGroup = sizeSettings.getSettingGroup(realInstance)
 			if isCatching and not (sizeSettingGroup and sizeSettingGroup.updateContinuous) then
 				return
 			end
 
-			if containerHelper.isValidContained(changedInstance) then
+			if containerHelper.isValidContained(realInstance) then
 				orthonormalizePart(changedInstance)
 			end
 
