@@ -252,6 +252,8 @@ function selectionDisplay.initialize()
 
 	janitor:Add(RunService.Heartbeat:Connect(function()
 		for _, adornmentJanitor_ in adornmentJanitors do
+			local cameraCFrame = workspace.CurrentCamera.CFrame
+
 			local adornmentJanitor = adornmentJanitor_ :: any
 			local xA = adornmentJanitor:Get("xA") :: CylinderHandleAdornment
 			local xB = adornmentJanitor:Get("xB") :: CylinderHandleAdornment
@@ -260,26 +262,45 @@ function selectionDisplay.initialize()
 			local zA = adornmentJanitor:Get("zA") :: CylinderHandleAdornment
 			local zB = adornmentJanitor:Get("zB") :: CylinderHandleAdornment
 
-			local adornee = xA.Adornee :: BasePart
+			local box1 = adornmentJanitor:Get("box1") :: SelectionBox
+			local box2 = adornmentJanitor:Get("box2") :: SelectionBox
 
-			local cameraCFrame = workspace.CurrentCamera.CFrame
+			if xA then
+				local adornee = xA.Adornee :: BasePart
 
-			local distance = math.max(0, (adornee.Position - cameraCFrame.Position):Dot(cameraCFrame.LookVector))
+				local distance = math.max(0, (adornee.Position - cameraCFrame.Position):Dot(cameraCFrame.LookVector))
 
-			xA.Radius = distance * 0.0075
-			xB.Radius = distance * 0.0075
-			yA.Radius = distance * 0.0075
-			yB.Radius = distance * 0.0075
-			zA.Radius = distance * 0.0075
-			zB.Radius = distance * 0.0075
+				xA.Radius = distance * 0.0075
+				xB.Radius = distance * 0.0075
+				yA.Radius = distance * 0.0075
+				yB.Radius = distance * 0.0075
+				zA.Radius = distance * 0.0075
+				zB.Radius = distance * 0.0075
 
-			if xA:GetAttribute("scaleHeight") then
-				xA.Height = distance * 0.07
-				xB.Height = distance * 0.07
-				yA.Height = distance * 0.07
-				yB.Height = distance * 0.07
-				zA.Height = distance * 0.07
-				zB.Height = distance * 0.07
+				if xA:GetAttribute("scaleHeight") then
+					xA.Height = distance * 0.07
+					xB.Height = distance * 0.07
+					yA.Height = distance * 0.07
+					yB.Height = distance * 0.07
+					zA.Height = distance * 0.07
+					zB.Height = distance * 0.07
+				end
+			end
+
+			if box1 then
+				local adornee = box1.Adornee :: BasePart
+
+				local distance = math.max(0, (adornee.Position - cameraCFrame.Position):Dot(cameraCFrame.LookVector))
+
+				box1.LineThickness = distance * 0.001
+			end
+
+			if box2 then
+				local adornee = box2.Adornee :: BasePart
+
+				local distance = math.max(0, (adornee.Position - cameraCFrame.Position):Dot(cameraCFrame.LookVector))
+
+				box2.LineThickness = distance * 0.001
 			end
 		end
 	end))
