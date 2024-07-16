@@ -243,7 +243,6 @@ function changeCatcher.initialize(plugin: Plugin)
 		selectionHelper.callbackDicts.containerOrContained,
 		{ "CFrame", "Size" },
 		function(changedInstance, selection, fauxSelection, fromString: any)
-			print("-------- CHANGE --------")
 			local realInstance = selectionHelper.getRealInstance(changedInstance)
 			if not (changedInstance:IsA("BasePart") and realInstance:IsA("BasePart")) then
 				return
