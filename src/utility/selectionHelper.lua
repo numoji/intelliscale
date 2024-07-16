@@ -1,4 +1,5 @@
 --!strict
+local CoreGui = game:GetService("CoreGui")
 local Selection = game:GetService("Selection")
 
 local Janitor = require(script.Parent.Parent.Parent.Packages.Janitor)
@@ -8,7 +9,8 @@ local realTransform = require(script.Parent.Parent.utility.realTransform)
 local selectionHelper = {}
 
 local janitor = Janitor.new()
-local propertyAttributeJanitor = janitor:Add(Janitor.new())
+local propertyAttributeJanitor
+local fauxPartFolder: Folder?
 
 type ChangedEventName = "Changed" | "AttributeChanged"
 type Selection = { Instance }
@@ -302,8 +304,7 @@ local function getSelectionAndFauxSelection(): (Selection, Selection)
 			fauxPart.Anchored = true
 			fauxPart.CanCollide = false
 			fauxPart.Transparency = 1
-			-- fauxPart.CollisionGroup = "IntelliscaleUnselectable"
-			fauxPart.Parent = workspace.CurrentCamera
+			fauxPart.Parent = fauxPartFolder
 			fauxPart.Name = "FauxPart"
 
 			fauxPart.Size, fauxPart.CFrame = realTransform.getSizeAndGlobalCFrame(part)
@@ -559,6 +560,15 @@ selectionHelper.getUnvalidatedSelection = function(): ({ Instance }, { Instance 
 end
 
 function selectionHelper.initialize()
+	propertyAttributeJanitor = (janitor :: any):Add(Janitor.new())
+	fauxPartFolder = Instance.new("Folder");
+	(fauxPartFolder :: Folder).Name = "IntelliscaleFauxParts";
+	(fauxPartFolder :: Folder).Parent = CoreGui
+	janitor:Add(function()
+		(fauxPartFolder :: Folder).Parent = nil
+		fauxPartFolder = nil
+	end)
+
 	janitor:Add(Selection.SelectionChanged:Connect(selectionHelper.updateSelection))
 
 	janitor:Add(function()

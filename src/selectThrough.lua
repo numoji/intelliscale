@@ -23,7 +23,6 @@ function addToSetRecursive(part: BasePart, set: SelectThroughSet)
 	local fauxPart = selectionHelper.fauxPartByPart[part]
 	local isContainer = containerHelper.isValidContainer(part) and part:GetAttribute("isContainer") == true
 	if (fauxPart ~= nil :: any) or isContainer then
-		print("add to set", part, fauxPart, isContainer)
 		if not set[part] then
 			set[part] = true
 		end

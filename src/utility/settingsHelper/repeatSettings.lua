@@ -107,6 +107,10 @@ function repeatSettings.getSettingGroup(instance: BasePart | Folder): SingleSett
 end
 
 function repeatSettings.doesHaveAnyRepeatSettings(instance: Instance)
+	if not containerHelper.isValidContained(instance) then
+		return false
+	end
+
 	local xRepeatKind = instance:GetAttribute("xRepeatKind")
 	local yRepeatKind = instance:GetAttribute("yRepeatKind")
 	local zRepeatKind = instance:GetAttribute("zRepeatKind")
@@ -114,7 +118,20 @@ function repeatSettings.doesHaveAnyRepeatSettings(instance: Instance)
 	return xRepeatKind or yRepeatKind or zRepeatKind
 end
 
+function repeatSettings.doesHaveAnyRepeatSettingsInAxis(instance: Instance, axis: types.AxisString)
+	if not containerHelper.isValidContained(instance) then
+		return false
+	end
+
+	local repeatKind = instance:GetAttribute(axis .. "RepeatKind")
+	return repeatKind
+end
+
 function repeatSettings.doesHaveToExtentsRepeatSettings(instance: Instance)
+	if not containerHelper.isValidContained(instance) then
+		return false
+	end
+
 	local xRepeatKind = instance:GetAttribute("xRepeatKind")
 	local yRepeatKind = instance:GetAttribute("yRepeatKind")
 	local zRepeatKind = instance:GetAttribute("zRepeatKind")
@@ -122,7 +139,20 @@ function repeatSettings.doesHaveToExtentsRepeatSettings(instance: Instance)
 	return xRepeatKind == "To Extents" or yRepeatKind == "To Extents" or zRepeatKind == "To Extents"
 end
 
+function repeatSettings.doesHaveToExtentsRepeatSettingsInAxis(instance: Instance, axis: types.AxisString)
+	if not containerHelper.isValidContained(instance) then
+		return false
+	end
+
+	local repeatKind = instance:GetAttribute(axis .. "RepeatKind")
+	return repeatKind == "To Extents"
+end
+
 function repeatSettings.doesHaveStretchSettings(instance: Instance)
+	if not containerHelper.isValidContained(instance) then
+		return false
+	end
+
 	local xRepeatKind = instance:GetAttribute("xRepeatKind")
 	local yRepeatKind = instance:GetAttribute("yRepeatKind")
 	local zRepeatKind = instance:GetAttribute("zRepeatKind")
@@ -130,6 +160,15 @@ function repeatSettings.doesHaveStretchSettings(instance: Instance)
 	return (xRepeatKind == "To Extents" and instance:GetAttribute("xStretchToFit"))
 		or (yRepeatKind == "To Extents" and instance:GetAttribute("yStretchToFit"))
 		or (zRepeatKind == "To Extents" and instance:GetAttribute("zStretchToFit"))
+end
+
+function repeatSettings.doesHaveStretchSettingsInAxis(instance: Instance, axis: types.AxisString)
+	if not containerHelper.isValidContained(instance) then
+		return false
+	end
+
+	local repeatKind = instance:GetAttribute(axis .. "RepeatKind")
+	return repeatKind == "To Extents" and instance:GetAttribute(axis .. "StretchToFit")
 end
 
 function repeatSettings.cacheSettings(repeatSettings: SingleSettingGroup, instance: Instance)

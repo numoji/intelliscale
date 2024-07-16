@@ -104,7 +104,7 @@ local function orthonormalizePart(part: BasePart)
 			orthonormalizeVector(relativeCFrame.YVector)
 		)
 
-		part.CFrame = parent.CFrame * newRelativeCFrame
+		changeDeduplicator.setProp("scaling", part, "CFrame", parent.CFrame * newRelativeCFrame)
 	end
 end
 
@@ -125,22 +125,28 @@ end
 local function updateSize(part: BasePart, previousSize: Vector3, repeatUpdates: { BasePart }): boolean
 	local realPart = selectionHelper.getRealInstance(part) :: BasePart
 
-	local axes: { types.AxisString } = {}
-	if not mathUtil.fuzzyEq(previousSize.X, part.Size.X) then
-		table.insert(axes, "x")
-	end
-	if not mathUtil.fuzzyEq(previousSize.Y, part.Size.Y) then
-		table.insert(axes, "y")
-	end
-	if not mathUtil.fuzzyEq(previousSize.Z, part.Size.Z) then
-		table.insert(axes, "z")
-	end
+	if realPart ~= part then
+		local axes: { types.AxisString } = {}
+		if not mathUtil.fuzzyEq(previousSize.X, part.Size.X) then
+			table.insert(axes, "x")
+		end
+		if not mathUtil.fuzzyEq(previousSize.Y, part.Size.Y) then
+			table.insert(axes, "y")
+		end
+		if not mathUtil.fuzzyEq(previousSize.Z, part.Size.Z) then
+			table.insert(axes, "z")
+		end
 
-	if #axes > 0 then
-		local newParentSize = part.Size
-		local newParentCFrame = part.CFrame
+		if #axes > 0 then
+			local newParentSize = part.Size
+			local newParentCFrame = part.CFrame
 
-		scaling.moveAndScaleChildrenRecursive(realPart, newParentSize, newParentCFrame, axes, repeatUpdates, true)
+			scaling.moveAndScaleChildrenRecursive(realPart, newParentSize, newParentCFrame, axes, repeatUpdates, true)
+			return true
+		end
+	elseif not part.Size:FuzzyEq(previousSize, mathUtil.epsilon) then
+		local scalar = part.Size / previousSize
+		scaling.scaleAttributeTransformsRecursive(realPart, scalar)
 		return true
 	end
 
@@ -153,29 +159,57 @@ function changeCatcher.finishCatching()
 		orthonormalizePart(part)
 	end
 
-	local deferredRepeatingUpdates = {}
+	local repeatUpdates = {}
+	local checkParents = {}
 
-	for part, previousCFrame in initialProps.cframes do
-		local didUpdate = updateCFrame(part, previousCFrame)
-		if didUpdate then
-			local realPart = selectionHelper.getRealInstance(part) :: BasePart
-			table.insert(deferredRepeatingUpdates, realPart)
-		end
-	end
-
+	local didUpdateSize = false
 	for part, previousSize in initialProps.sizes do
-		updateSize(part, previousSize, deferredRepeatingUpdates)
-	end
+		didUpdateSize = updateSize(part, previousSize, repeatUpdates)
+		local realPart = selectionHelper.getRealInstance(part) :: BasePart
 
-	for _, part in deferredRepeatingUpdates do
-		if containerHelper.isValidContained(part) then
-			repeating.updateRepeat(part)
+		if didUpdateSize and realPart ~= part then
+			if containerHelper.isValidContained(realPart) then
+				if repeatSettings.doesHaveAnyRepeatSettings(realPart) then
+					table.insert(repeatUpdates, realPart)
+				else
+					table.insert(checkParents, realPart)
+				end
+			end
 		end
 	end
+
+	if not didUpdateSize then
+		for part, previousCFrame in initialProps.cframes do
+			local didUpdateCFrame = updateCFrame(part, previousCFrame)
+			if didUpdateCFrame then
+				local realPart = selectionHelper.getRealInstance(part) :: BasePart
+				if repeatSettings.doesHaveAnyRepeatSettings(realPart) then
+					table.insert(repeatUpdates, realPart)
+				else
+					table.insert(checkParents, realPart)
+				end
+			end
+		end
+	end
+
+	if #repeatUpdates > 0 then
+		local pendingRepeatUpdateSet = {}
+		for _, part in repeatUpdates do
+			pendingRepeatUpdateSet[part] = true
+		end
+
+		for _, part in repeatUpdates do
+			repeating.updateRepeat(part, pendingRepeatUpdateSet)
+		end
+	elseif #checkParents > 0 then
+		local repeatUpdateSet = {}
+		for _, part in checkParents do
+			repeating.updateParentRecursive(part, repeatUpdateSet)
+		end
+	end
+
 	isCatching = false
 end
-
-local fauxPartChangedTo = {}
 
 function changeCatcher.initialize(plugin: Plugin)
 	studioHandlesStalker.handlesPressed:Connect(function()
@@ -209,6 +243,7 @@ function changeCatcher.initialize(plugin: Plugin)
 		selectionHelper.callbackDicts.containerOrContained,
 		{ "CFrame", "Size" },
 		function(changedInstance, selection, fauxSelection, fromString: any)
+			print("-------- CHANGE --------")
 			local realInstance = selectionHelper.getRealInstance(changedInstance)
 			if not (changedInstance:IsA("BasePart") and realInstance:IsA("BasePart")) then
 				return
@@ -239,31 +274,47 @@ function changeCatcher.initialize(plugin: Plugin)
 
 			local repeatUpdates = {}
 
+			local didUpdateSize, didUpdateCFrame = false, false
 			if initialProps.sizes[changedInstance] then
-				local didUpdateSize = updateSize(changedInstance, initialProps.sizes[changedInstance], repeatUpdates)
+				didUpdateSize = updateSize(changedInstance, initialProps.sizes[changedInstance], repeatUpdates)
 
 				if didUpdateSize then
 					initialProps.sizes[changedInstance] = changedInstance.Size
 					initialProps.cframes[changedInstance] = changedInstance.CFrame
-					fauxPartChangedTo[changedInstance] = nil
-					table.insert(repeatUpdates, realInstance)
+				end
+
+				if realInstance == changedInstance then
+					return
 				end
 			end
 
-			if initialProps.cframes[changedInstance] then
-				local didUpdateCFrame = updateCFrame(changedInstance, initialProps.cframes[changedInstance])
-				if didUpdateCFrame then
-					fauxPartChangedTo[changedInstance] = nil
-					table.insert(repeatUpdates, realInstance)
+			if not didUpdateSize then
+				if initialProps.cframes[changedInstance] then
+					didUpdateCFrame = updateCFrame(changedInstance, initialProps.cframes[changedInstance])
+					initialProps.cframes[changedInstance] = changedInstance.CFrame
 				end
-
-				initialProps.cframes[changedInstance] = changedInstance.CFrame
 			end
 
-			for _, part in repeatUpdates do
-				if containerHelper.isValidContained(part) then
-					repeating.updateRepeat(part)
+			if
+				(didUpdateSize or didUpdateCFrame)
+				and containerHelper.isValidContained(realInstance)
+				and repeatSettings.doesHaveAnyRepeatSettings(realInstance)
+			then
+				table.insert(repeatUpdates, realInstance)
+			end
+
+			if #repeatUpdates > 0 then
+				local pendingRepeatUpdateSet = {}
+				for _, part in repeatUpdates do
+					pendingRepeatUpdateSet[part] = true
 				end
+
+				for _, part in repeatUpdates do
+					repeating.updateRepeat(part, pendingRepeatUpdateSet)
+				end
+			else
+				local repeatUpdateSet = {}
+				repeating.updateParentRecursive(realInstance, repeatUpdateSet)
 			end
 		end
 	)

@@ -5,6 +5,7 @@ local Janitor = require(script.Parent.Parent.Packages.Janitor)
 
 local attributeHelper = require(script.Parent.utility.attributeHelper)
 local changeHistoryHelper = require(script.Parent.utility.changeHistoryHelper)
+local containerHelper = require(script.Parent.utility.containerHelper)
 local fuzzyDeepEquals = require(script.Parent.utility.fuzzyDeepEquals)
 local mathUtil = require(script.Parent.utility.mathUtil)
 local realTransform = require(script.Parent.utility.realTransform)
@@ -112,8 +113,8 @@ local function getSizeAndPositionAndRepeatRangeInAxis(
 		local halfSize = sizeInAxis / 2
 		local rangeMin, rangeMax
 		if axisRepeatSettings.settingValue == "To Extents" then
-			rangeMax = (parentEdgePos - halfSize - positionInAxis) // sizeInAxis
-			rangeMin = -((parentEdgePos - halfSize + positionInAxis) // sizeInAxis)
+			rangeMax = math.floor((parentEdgePos - halfSize - positionInAxis) / sizeInAxis + mathUtil.epsilon)
+			rangeMin = math.ceil((-parentEdgePos + halfSize - positionInAxis) / sizeInAxis - mathUtil.epsilon)
 		else
 			rangeMax = axisRepeatSettings.childrenSettings.repeatAmountPositive :: number
 			rangeMin = axisRepeatSettings.childrenSettings.repeatAmountNegative :: number
@@ -130,7 +131,7 @@ local function getSizeAndPositionAndRepeatRangeInAxis(
 	local roundedPositionInAxis = mathUtil.round(positionInAxis - roundOffset, sizeInAxis) + roundOffset
 
 	local rangeMax = mathUtil.round((parentEdgePos - halfSize - roundedPositionInAxis) / sizeInAxis, 1)
-	local rangeMin = mathUtil.round((halfSize - parentEdgePos - roundedPositionInAxis) / sizeInAxis, 1)
+	local rangeMin = mathUtil.round((-parentEdgePos + halfSize - roundedPositionInAxis) / sizeInAxis, 1)
 
 	return sizeInAxis * relativeAxis * sign, roundedPositionInAxis * axis, rangeMax, rangeMin
 end
@@ -206,6 +207,12 @@ local function flattenInstanceHierarchyRecursive<InstanceType>(instance: Instanc
 	return instance
 end
 
+local function clearAttributes(instance: Instance)
+	for attribute, _ in pairs(instance:GetAttributes()) do
+		instance:SetAttribute(attribute, nil)
+	end
+end
+
 local function reconcileRepeats(
 	sourcePart: BasePart,
 	shouldRecreate: boolean,
@@ -230,7 +237,9 @@ local function reconcileRepeats(
 	end
 
 	if shouldRecreate then
-		repeatsFolder:ClearAllChildren()
+		for _, repeatInstance in repeatsFolder:GetChildren() do
+			repeatInstance.Parent = nil
+		end
 	end
 
 	local flatSource: Instance
@@ -240,15 +249,18 @@ local function reconcileRepeats(
 			hasFlatBeenUsed = true
 			flatSource = repeatsFolder:GetChildren()[1]
 		else
-			flatSource = Instance.new("Model");
-			(flatSource :: Model).PrimaryPart = flattenInstanceHierarchyRecursive(sourcePart:Clone(), flatSource)
+			flatSource = Instance.new("Model")
+			local flatSourcePart = sourcePart:Clone()
+			clearAttributes(flatSourcePart);
+			(flatSource :: Model).PrimaryPart = flattenInstanceHierarchyRecursive(flatSourcePart, flatSource)
 		end
 	else
 		flatSource = sourcePart:Clone()
+		clearAttributes(flatSource)
 		local flatRepeats = flatSource:FindFirstChild("__repeats_intelliscale_internal") :: Folder;
 		(flatSource :: BasePart).CollisionGroup = "IntelliscaleUnselectable"
 		if flatRepeats then
-			flatRepeats:Destroy()
+			flatRepeats.Parent = nil
 		end
 	end
 
@@ -330,16 +342,21 @@ local function reconcileRepeats(
 	end
 end
 
-local changesLastFrame = 0
-local changesInFrame = 0
-function repeating.updateRepeat(sourcePart: BasePart)
-	if not attributeHelper.wasLastChangedByMe(sourcePart) then
-		return
-	end
+function repeating.updateParentRecursive(part, repeatUpdateSet: { [BasePart]: boolean }?)
+	local parent = part.Parent :: BasePart
+	local doesParentHaveRepeatSettings = repeatSettings.doesHaveAnyRepeatSettings(parent)
+	local isNotInUpdateSet = repeatUpdateSet == nil or repeatUpdateSet[parent] == nil
+	local shouldUpdateParent = isNotInUpdateSet and doesParentHaveRepeatSettings
 
-	changesInFrame += 1
-	if changesInFrame > 10 or changesLastFrame > 10 then
-		error("No more  repeat changes this frame, hung too long.")
+	if shouldUpdateParent then
+		repeating.updateRepeat(part.Parent :: BasePart, repeatUpdateSet, true)
+	elseif isNotInUpdateSet and containerHelper.isValidContained(parent) then
+		repeating.updateParentRecursive(parent, repeatUpdateSet)
+	end
+end
+
+function repeating.updateRepeat(sourcePart: BasePart, repeatUpdateSet: { [BasePart]: boolean }?, isUpdateFromChildChange: boolean?)
+	if not attributeHelper.wasLastChangedByMe(sourcePart) then
 		return
 	end
 
@@ -377,58 +394,65 @@ function repeating.updateRepeat(sourcePart: BasePart)
 		end
 	end
 
-	if newRepeatSettings and hasStretchToFitSettings(newRepeatSettings) then
-		local realSize, realRelativeCFrame = realTransform.getSizeAndRelativeCFrame(sourcePart)
-		realTransform.setSizeAndRelativeCFrameAttributes(sourcePart, realSize, realRelativeCFrame)
-		realTransform.setSizeAndRelativeCFrameAttributes(repeatsFolder, realSize, realRelativeCFrame)
-	else
-		if realTransform.hasTransform(sourcePart) then
-			realTransform.setSizeAndRelativeCFrameAttributes(sourcePart, nil, nil)
-			realTransform.setSizeAndRelativeCFrameAttributes(repeatsFolder, nil, nil)
-		end
-	end
-
-	local parent = sourcePart.Parent :: BasePart
-
-	local prevDisplayRelativeCFrame = prev.displayRelativeCFrame :: CFrame
-	local partRelativeCFrame = parent.CFrame:ToObjectSpace(sourcePart.CFrame)
-	local shouldUpdateRotation = not mathUtil.cframeFuzzyEq(newDisplayRelativeCFrame.Rotation, prevDisplayRelativeCFrame.Rotation)
-	local didRotationChange = shouldUpdateRotation
-		or not mathUtil.cframeFuzzyEq(newDisplayRelativeCFrame.Rotation, prevDisplayRelativeCFrame.Rotation)
-
-	local shouldUpdatePosition = not newDisplayRelativeCFrame.Position:FuzzyEq(partRelativeCFrame.Position, mathUtil.epsilon)
-
-	local prevDisplaySize = prev.displaySize :: Vector3
-	local shouldUpdateSize = sourcePart.Size ~= newDisplaySize
-	local didSizeChange = shouldUpdateSize or not newDisplaySize:FuzzyEq(prevDisplaySize, mathUtil.epsilon)
-
-	local shouldUpdateRanges = not fuzzyDeepEquals(prev.repeatRanges, new.repeatRanges)
-
-	-- Reposition the source part if necessary
-	if shouldUpdateSize then
-		local newCFrame = parent.CFrame * newDisplayRelativeCFrame
-		local changedList = {}
-
-		local axes: { types.AxisString } = {}
-
-		if not mathUtil.fuzzyEq(newDisplaySize.X, prevDisplaySize.X) then
-			table.insert(axes, "x")
-		end
-		if not mathUtil.fuzzyEq(newDisplaySize.Y, prevDisplaySize.Y) then
-			table.insert(axes, "y")
-		end
-		if not mathUtil.fuzzyEq(newDisplaySize.Z, prevDisplaySize.Z) then
-			table.insert(axes, "z")
+	local didRotationChange, didSizeChange, shouldUpdateRanges = false, false, false
+	if not isUpdateFromChildChange then
+		if newRepeatSettings and hasStretchToFitSettings(newRepeatSettings) then
+			local realSize, realRelativeCFrame = realTransform.getSizeAndRelativeCFrame(sourcePart)
+			realTransform.setSizeAndRelativeCFrameAttributes(sourcePart, realSize, realRelativeCFrame)
+			realTransform.setSizeAndRelativeCFrameAttributes(repeatsFolder, realSize, realRelativeCFrame)
+		else
+			if realTransform.hasTransform(sourcePart) then
+				realTransform.setSizeAndRelativeCFrameAttributes(sourcePart, nil, nil)
+				realTransform.setSizeAndRelativeCFrameAttributes(repeatsFolder, nil, nil)
+			end
 		end
 
-		scaling.moveAndScaleChildrenRecursive(sourcePart, newDisplaySize, newCFrame, axes, changedList)
+		local parent = sourcePart.Parent :: BasePart
 
-		for _, changedPart in changedList do
-			repeating.updateRepeat(changedPart)
+		local prevDisplayRelativeCFrame = prev.displayRelativeCFrame :: CFrame
+		local partRelativeCFrame = parent.CFrame:ToObjectSpace(sourcePart.CFrame)
+		local shouldUpdateRotation = not mathUtil.cframeFuzzyEq(newDisplayRelativeCFrame.Rotation, prevDisplayRelativeCFrame.Rotation)
+		didRotationChange = shouldUpdateRotation
+			or not mathUtil.cframeFuzzyEq(newDisplayRelativeCFrame.Rotation, prevDisplayRelativeCFrame.Rotation)
+
+		local shouldUpdatePosition = not newDisplayRelativeCFrame.Position:FuzzyEq(partRelativeCFrame.Position, mathUtil.epsilon)
+
+		local prevDisplaySize = prev.displaySize :: Vector3
+		local shouldUpdateSize = sourcePart.Size ~= newDisplaySize
+		didSizeChange = shouldUpdateSize or not newDisplaySize:FuzzyEq(prevDisplaySize, mathUtil.epsilon)
+
+		shouldUpdateRanges = not fuzzyDeepEquals(prev.repeatRanges, new.repeatRanges)
+
+		-- Reposition the source part if necessary
+		if shouldUpdateSize then
+			local newCFrame = parent.CFrame * newDisplayRelativeCFrame
+			local repeatUpdateList = {}
+
+			local axes: { types.AxisString } = {}
+
+			if not mathUtil.fuzzyEq(newDisplaySize.X, prevDisplaySize.X) then
+				table.insert(axes, "x")
+			end
+			if not mathUtil.fuzzyEq(newDisplaySize.Y, prevDisplaySize.Y) then
+				table.insert(axes, "y")
+			end
+			if not mathUtil.fuzzyEq(newDisplaySize.Z, prevDisplaySize.Z) then
+				table.insert(axes, "z")
+			end
+
+			local childrenRepeatUpdateSet = { [sourcePart] = true }
+			scaling.moveAndScaleChildrenRecursive(sourcePart, newDisplaySize, newCFrame, axes, repeatUpdateList)
+			for _, part in repeatUpdateList do
+				childrenRepeatUpdateSet[part] = true
+			end
+
+			for _, part in repeatUpdateList do
+				repeating.updateRepeat(part, childrenRepeatUpdateSet)
+			end
+		elseif shouldUpdateRotation or shouldUpdatePosition then
+			local deltaCFrame = partRelativeCFrame:ToObjectSpace(newDisplayRelativeCFrame)
+			scaling.cframeRecursive(sourcePart, deltaCFrame, false, true)
 		end
-	elseif shouldUpdateRotation or shouldUpdatePosition then
-		local deltaCFrame = partRelativeCFrame:ToObjectSpace(newDisplayRelativeCFrame)
-		scaling.cframeRecursive(sourcePart, deltaCFrame, false, true)
 	end
 
 	-- If we've cleared all repeat settings, remove the repeats folder.
@@ -469,9 +493,13 @@ function repeating.updateRepeat(sourcePart: BasePart)
 
 		repeatSettings.cacheSettings(newRepeatSettings, repeatsFolder)
 
-		if shouldUpdateRanges or didSizeChange or didRotationChange then
-			local shouldRecreate = didSizeChange
+		if shouldUpdateRanges or didSizeChange or didRotationChange or isUpdateFromChildChange then
+			local shouldRecreate = didSizeChange or isUpdateFromChildChange == true
 			reconcileRepeats(sourcePart, shouldRecreate, prev.repeatRanges, new.repeatRanges :: RepeatRanges)
+			if repeatUpdateSet and not repeatUpdateSet[sourcePart] then
+				repeatUpdateSet[sourcePart] = true
+			end
+			repeating.updateParentRecursive(sourcePart, repeatUpdateSet)
 		end
 	end
 end
@@ -514,11 +542,6 @@ function repeating.initialize()
 		task.defer(function()
 			repeating.isUpdatingFromAttributeChange = false
 		end)
-	end))
-
-	janitor:Add(RunService.Heartbeat:Connect(function()
-		changesLastFrame = changesInFrame
-		changesInFrame = 0
 	end))
 
 	return janitor

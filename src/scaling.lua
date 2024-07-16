@@ -3,8 +3,10 @@ local changeDeduplicator = require(script.Parent.utility.changeDeduplicator)
 local constraintSettings = require(script.Parent.utility.settingsHelper.constraintSettings)
 local containerHelper = require(script.Parent.utility.containerHelper)
 local geometryHelper = require(script.Parent.utility.geometryHelper)
+local inspectPrint = require(script.Parent.utility.inspectPrint)
 local mathUtil = require(script.Parent.utility.mathUtil)
 local realTransform = require(script.Parent.utility.realTransform)
+local repeatSettings = require(script.Parent.utility.settingsHelper.repeatSettings)
 local types = require(script.Parent.types)
 
 local scaling = {}
@@ -85,6 +87,23 @@ function scaling.moveChildrenRecursive(deltaPosition: Vector3, part: BasePart)
 	part.Position += deltaPosition
 end
 
+function scaling.scaleAttributeTransformsRecursive(instance: Instance, scalar: Vector3)
+	if instance:IsA("BasePart") then
+		local sizeAtt, cframeAtt = realTransform.getSizeAndRelativeCFrameAttributes(instance)
+		if sizeAtt then
+			realTransform.setSizeAttribute(instance, sizeAtt * scalar)
+		end
+		if cframeAtt then
+			local newCFrame = CFrame.new(cframeAtt.Position * scalar) * cframeAtt.Rotation
+			realTransform.setRelativeCFrameAttribute(instance, newCFrame)
+		end
+	end
+
+	for _, child in instance:GetChildren() do
+		scaling.scaleAttributeTransformsRecursive(child, scalar)
+	end
+end
+
 function scaling.cframeRecursive(
 	part: BasePart,
 	deltaCFrame: CFrame?,
@@ -94,10 +113,27 @@ function scaling.cframeRecursive(
 	parentCFrame: CFrame?
 )
 	local currentCFrame = part.CFrame
-	local shouldUseAttribute = false
+	local shouldSetAttributeOnly = false
 	if shouldWriteToAttribute and containerHelper.isValidContained(part) and realTransform.hasCFrame(part) then
 		currentCFrame = realTransform.getGlobalCFrame(part, parentCFrame)
-		shouldUseAttribute = true
+
+		local axes: { types.AxisString } = {}
+		if deltaCFrame and mathUtil.fuzzyEq(deltaCFrame.Position.X, 0) then
+			table.insert(axes, "x")
+		end
+		if deltaCFrame and mathUtil.fuzzyEq(deltaCFrame.Position.Y, 0) then
+			table.insert(axes, "y")
+		end
+		if deltaCFrame and mathUtil.fuzzyEq(deltaCFrame.Position.Z, 0) then
+			table.insert(axes, "z")
+		end
+
+		for _, axis: types.AxisString in axes do
+			if shouldWriteToAttribute and repeatSettings.doesHaveStretchSettingsInAxis(part, axis) then
+				shouldSetAttributeOnly = true
+				continue
+			end
+		end
 	end
 
 	local newCFrame
@@ -107,24 +143,44 @@ function scaling.cframeRecursive(
 		newCFrame = newParentCFrame * parentCFrame:ToObjectSpace(part.CFrame)
 	end
 
-	if shouldUseAttribute then
+	if shouldSetAttributeOnly then
 		realTransform.setGlobalCFrame(part, newCFrame, newParentCFrame)
 		return
 	end
 
 	for _, child in part:GetChildren() do
 		if child:IsA("BasePart") then
-			scaling.cframeRecursive(child, nil, true, true, newCFrame, currentCFrame)
+			scaling.cframeRecursive(child, nil, false, true, newCFrame, currentCFrame)
+		elseif child:IsA("Model") then
+			local newModelCFrame = newCFrame * currentCFrame:ToObjectSpace(child.WorldPivot)
+			child:PivotTo(newModelCFrame)
 		elseif child:IsA("Folder") and shouldMoveRepeats then
+			if part.Name == "zPart" and deltaCFrame and not mathUtil.fuzzyEq(deltaCFrame.Position.Z, 0) then
+				inspectPrint("zpart repeats position set", 2)
+				print(
+					part,
+					"moving repeats :: ",
+					"should write att",
+					shouldSetAttributeOnly,
+					"| delta cf",
+					deltaCFrame and deltaCFrame.Position
+				)
+			end
 			for _, folderChild in child:GetChildren() do
 				if folderChild:IsA("BasePart") then
-					scaling.cframeRecursive(folderChild, nil, true, true, newCFrame, currentCFrame)
+					scaling.cframeRecursive(folderChild, nil, false, true, newCFrame, currentCFrame)
+				elseif folderChild:IsA("Model") then
+					local newModelCFrame = newCFrame * currentCFrame:ToObjectSpace(folderChild.WorldPivot)
+					folderChild:PivotTo(newModelCFrame)
 				end
 			end
 		end
 	end
 
 	changeDeduplicator.setProp("scaling", part, "CFrame", newCFrame)
+	if shouldWriteToAttribute then
+		realTransform.setGlobalCFrame(part, newCFrame, newParentCFrame)
+	end
 end
 
 function scaling.updateChildrenCFrames(instance: Instance, newParentCFrame: CFrame, parentCFrame: CFrame)
@@ -133,11 +189,11 @@ function scaling.updateChildrenCFrames(instance: Instance, newParentCFrame: CFra
 			local newCFrame = newParentCFrame * parentCFrame:ToObjectSpace(child.CFrame)
 			local currentCFrame = child.CFrame
 
-			scaling.cframeRecursive(child, nil, true, true, newCFrame, currentCFrame)
+			scaling.cframeRecursive(child, nil, false, true, newCFrame, currentCFrame)
 		elseif child:IsA("Folder") then
 			for _, folderChild in child:GetChildren() do
 				if folderChild:IsA("BasePart") then
-					scaling.cframeRecursive(folderChild, nil, true, true, newParentCFrame, parentCFrame)
+					scaling.cframeRecursive(folderChild, nil, false, true, newParentCFrame, parentCFrame)
 				end
 			end
 		end
@@ -149,18 +205,19 @@ function scaling.moveAndScaleChildrenRecursive(
 	newSize: Vector3,
 	newCFrame: CFrame,
 	axes: { types.AxisString },
-	changedList: { BasePart },
-	shouldNotResizeStretchedRepeat: boolean?,
+	updateRepeatList: { BasePart },
+	shouldWriteToAttribute: boolean?,
 	newParentCFrame: CFrame?
 )
-	if shouldNotResizeStretchedRepeat and realTransform.hasTransform(part) then
-		realTransform.setSizeAndGlobalCFrame(part, newSize, newCFrame, newParentCFrame)
-		return
+	for _, axis: types.AxisString in axes do
+		if shouldWriteToAttribute and repeatSettings.doesHaveStretchSettingsInAxis(part, axis) then
+			realTransform.setSizeAndGlobalCFrame(part, newSize, newCFrame, newParentCFrame)
+			return
+		end
 	end
 
 	for _, child in part:GetChildren() do
 		if child:IsA("BasePart") then
-			table.insert(changedList, 1, child)
 			local totalRelativeDeltaCFrame = CFrame.identity
 			local totalDeltaSize = Vector3.zero
 			for _, axis: types.AxisString in axes do
@@ -185,16 +242,23 @@ function scaling.moveAndScaleChildrenRecursive(
 			local newChildCFrame = newCFrame * totalRelativeDeltaCFrame * relativeCFrame
 			local newChildSize = size + totalDeltaSize
 
+			if repeatSettings.doesHaveAnyRepeatSettings(child) then
+				table.insert(updateRepeatList, 1, child)
+			end
+
 			if totalDeltaSize == Vector3.zero then
 				scaling.cframeRecursive(child, childCFrame:ToObjectSpace(newChildCFrame), true, true, newCFrame)
 			else
-				scaling.moveAndScaleChildrenRecursive(child, newChildSize, newChildCFrame, axes, changedList, true, newCFrame)
+				scaling.moveAndScaleChildrenRecursive(child, newChildSize, newChildCFrame, axes, updateRepeatList, true, newCFrame)
 			end
 		end
 	end
 
 	changeDeduplicator.setProp("scaling", part, "Size", newSize)
 	changeDeduplicator.setProp("scaling", part, "CFrame", newCFrame)
+	if shouldWriteToAttribute then
+		realTransform.setSizeAndGlobalCFrame(part, newSize, newCFrame, newParentCFrame)
+	end
 end
 
 return scaling

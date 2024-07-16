@@ -2,6 +2,7 @@
 local RunService = game:GetService("RunService")
 
 local Janitor = require(script.Parent.Parent.Parent.Packages.Janitor)
+local inspectPrint = require(script.Parent.inspectPrint)
 local changeDeduplicator = {}
 
 local janitor = Janitor.new()
@@ -83,6 +84,9 @@ local function createChangeDiffer(scopes: Scopes, getterFunc: (Instance, string)
 end
 
 changeDeduplicator.setProp = createSetter(propertyScopes, function(instance: Instance, propName: string, value: any)
+	-- if instance.Name == "zPart" then
+	-- 	inspectPrint(`{instance}.{propName} set`, 3)
+	-- end
 	instance[propName] = value
 end)
 

@@ -13,12 +13,12 @@ local types = require(script.Parent.types)
 local janitor = Janitor.new()
 
 local function createCylinderHandle(color, parent)
-	local cylinderHandle = janitor:Add(Instance.new("CylinderHandleAdornment"))
+	local cylinderHandle = Instance.new("CylinderHandleAdornment")
 	cylinderHandle.AdornCullingMode = Enum.AdornCullingMode.Never
 	cylinderHandle.Transparency = 0.1
 	cylinderHandle.AlwaysOnTop = true
 	cylinderHandle.Parent = parent
-	cylinderHandle.Radius = 0.05
+	cylinderHandle.Radius = 0.075
 	cylinderHandle.InnerRadius = 0.001
 	cylinderHandle.Angle = 360
 	cylinderHandle.Color3 = color
@@ -28,7 +28,7 @@ local function createCylinderHandle(color, parent)
 end
 
 local function createSelectionBox(color, parent)
-	local selectionBox = janitor:Add(Instance.new("SelectionBox"))
+	local selectionBox = Instance.new("SelectionBox")
 	selectionBox.LineThickness = 0.02
 	selectionBox.SurfaceTransparency = 0.95
 	selectionBox.SurfaceColor3 = color
@@ -149,57 +149,103 @@ function selectionDisplay.initialize()
 	screenGui.Parent = CoreGui
 	screenGui.Name = "IntelliscaleConstraintVisualization"
 
-	local containerSelectionBox = createSelectionBox(Color3.fromHex("#f34bff"), screenGui)
-	local fauxSelectionBox = createSelectionBox(Color3.fromHex("#6fff4f"), screenGui)
+	local adornmentJanitors = {}
 
-	local xCylinderA = createCylinderHandle(Color3.fromRGB(255, 90, 0), screenGui)
-	local xCylinderB = createCylinderHandle(Color3.fromRGB(255, 90, 0), screenGui)
-	local yCylinderA = createCylinderHandle(Color3.fromRGB(0, 255, 90), screenGui)
-	local yCylinderB = createCylinderHandle(Color3.fromRGB(0, 255, 90), screenGui)
-	local zCylinderA = createCylinderHandle(Color3.fromRGB(90, 0, 255), screenGui)
-	local zCylinderB = createCylinderHandle(Color3.fromRGB(90, 0, 255), screenGui)
+	local function reconcileSelectionAdornments(selection, fauxSelection)
+		local newSelectedSet = {}
+		local containerSelectedSet = {}
+		for _, instance in fauxSelection do
+			if not instance:IsA("BasePart") then
+				continue
+			end
 
-	local function update(selectedPart: BasePart, fauxPart: BasePart)
-		if containerHelper.isValidContained(selectedPart) then
-			containerSelectionBox.Adornee = selectedPart.Parent
-			updateCylindersByAxis("x", selectedPart, xCylinderA, xCylinderB)
-			updateCylindersByAxis("y", selectedPart, yCylinderA, yCylinderB)
-			updateCylindersByAxis("z", selectedPart, zCylinderA, zCylinderB)
-		else
-			xCylinderA.Adornee = nil :: any
-			xCylinderB.Adornee = nil :: any
-			yCylinderA.Adornee = nil :: any
-			yCylinderB.Adornee = nil :: any
-			zCylinderA.Adornee = nil :: any
-			zCylinderB.Adornee = nil :: any
-			containerSelectionBox.Adornee = nil
+			local part = instance :: BasePart
+			local realPart = selectionHelper.getRealInstance(part) :: BasePart
+
+			if part ~= realPart then
+				newSelectedSet[part] = true
+				if not adornmentJanitors[part] then
+					local fauxSelectionJanitor = Janitor.new()
+					adornmentJanitors[part] = fauxSelectionJanitor
+					local fauxSelectionBox = fauxSelectionJanitor:Add(createSelectionBox(Color3.fromHex("#6fff4f"), screenGui))
+					fauxSelectionBox.Adornee = part
+				end
+			end
+
+			if containerHelper.isValidContained(realPart) then
+				newSelectedSet[realPart] = true
+				if not adornmentJanitors[realPart] then
+					local constraintJanitor = Janitor.new()
+					adornmentJanitors[realPart] = constraintJanitor
+
+					if not containerSelectedSet[realPart.Parent] then
+						containerSelectedSet[realPart.Parent] = true
+						local containerSelectionBox = constraintJanitor:Add(createSelectionBox(Color3.fromHex("#f34bff"), screenGui))
+						containerSelectionBox.Adornee = realPart.Parent
+					end
+
+					local xCylinderA = constraintJanitor:Add(createCylinderHandle(Color3.fromRGB(255, 170, 0), screenGui), "Destroy", "xA")
+					local xCylinderB = constraintJanitor:Add(createCylinderHandle(Color3.fromRGB(255, 170, 0), screenGui), "Destroy", "xB")
+					local yCylinderA = constraintJanitor:Add(createCylinderHandle(Color3.fromRGB(0, 255, 170), screenGui), "Destroy", "yA")
+					local yCylinderB = constraintJanitor:Add(createCylinderHandle(Color3.fromRGB(0, 255, 170), screenGui), "Destroy", "yB")
+					local zCylinderA = constraintJanitor:Add(createCylinderHandle(Color3.fromRGB(170, 0, 255), screenGui), "Destroy", "zA")
+					local zCylinderB = constraintJanitor:Add(createCylinderHandle(Color3.fromRGB(170, 0, 255), screenGui), "Destroy", "zB")
+
+					updateCylindersByAxis("x", realPart, xCylinderA, xCylinderB)
+					updateCylindersByAxis("y", realPart, yCylinderA, yCylinderB)
+					updateCylindersByAxis("z", realPart, zCylinderA, zCylinderB)
+				end
+			end
 		end
 
-		if fauxPart and fauxPart ~= selectedPart then
-			fauxSelectionBox.Adornee = fauxPart
-		else
-			fauxSelectionBox.Adornee = nil
+		for selectedPart, janitor in pairs(adornmentJanitors) do
+			if not newSelectedSet[selectedPart] then
+				janitor:Destroy()
+				adornmentJanitors[selectedPart] = nil
+			end
 		end
 	end
 
-	selectionHelper.addSelectionChangeCallback(selectionHelper.callbackDicts.singleContainerOrContained, update, function()
-		containerSelectionBox.Adornee = nil
-		fauxSelectionBox.Adornee = nil
-		xCylinderA.Adornee = nil :: any
-		xCylinderB.Adornee = nil :: any
-		yCylinderA.Adornee = nil :: any
-		yCylinderB.Adornee = nil :: any
-		zCylinderA.Adornee = nil :: any
-		zCylinderB.Adornee = nil :: any
-	end)
+	local function updateCylinderAdornments(selection)
+		for _, selectedPart in selection do
+			local adornmentJanitor = adornmentJanitors[selectedPart]
+			if not adornmentJanitor then
+				continue
+			end
+			local xA = adornmentJanitor:Get("xA") :: CylinderHandleAdornment
+			local xB = adornmentJanitor:Get("xB") :: CylinderHandleAdornment
+			if xA and xB then
+				updateCylindersByAxis("x", selectedPart, xA, xB)
+			end
+			local yA = adornmentJanitor:Get("yA") :: CylinderHandleAdornment
+			local yB = adornmentJanitor:Get("yB") :: CylinderHandleAdornment
+			if yA and yB then
+				updateCylindersByAxis("y", selectedPart, yA, yB)
+			end
+			local zA = adornmentJanitor:Get("zA") :: CylinderHandleAdornment
+			local zB = adornmentJanitor:Get("zB") :: CylinderHandleAdornment
+			if zA and zB then
+				updateCylindersByAxis("z", selectedPart, zA, zB)
+			end
+		end
+	end
+
+	selectionHelper.addSelectionChangeCallback(selectionHelper.callbackDicts.any, reconcileSelectionAdornments)
 
 	selectionHelper.addPropertyChangeCallback(
-		selectionHelper.callbackDicts.singleContainerOrContained,
-		{ "Parent", "Size", "CFrame" },
-		function(_, selectedPart, fauxPart)
-			update(selectedPart, fauxPart)
+		selectionHelper.callbackDicts.any,
+		{ "Parent", "Size", "CFrame", "Attributes" },
+		function(_, selection)
+			updateCylinderAdornments(selection)
 		end
 	)
+
+	janitor:Add(function()
+		for selectedPart, adornmentJanitor in pairs(adornmentJanitors) do
+			adornmentJanitor:Destroy()
+			adornmentJanitors[selectedPart] = nil
+		end
+	end)
 
 	return janitor
 end
