@@ -64,8 +64,12 @@ function selectThrough.initialize()
 
 		for part, _ in newSet do
 			if not selectThroughSet[part] then
-				cachedCollisionGroups[part] = part.CollisionGroup
-				part.CollisionGroup = "IntelliscaleUnselectable"
+				if part.CollisionGroup == "IntelliscaleUnselectable" then
+					cachedCollisionGroups[part] = "Default"
+				else
+					cachedCollisionGroups[part] = part.CollisionGroup
+					part.CollisionGroup = "IntelliscaleUnselectable"
+				end
 			end
 		end
 
