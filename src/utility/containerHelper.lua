@@ -1,5 +1,7 @@
 --!strict
 local Selection = game:GetService("Selection")
+
+local geometryHelper = require(script.Parent.geometryHelper)
 local containerHelper = {}
 
 function containerHelper.isValidContainer(instance: Instance)
@@ -18,6 +20,13 @@ function containerHelper.doesContainAnyParts(instance: Instance)
 	return instance:IsA("BasePart") and instance:FindFirstChildWhichIsA("BasePart") ~= nil
 end
 
+function neutralizeBoundingBoxRotation(boxCFrame, boxSize): (CFrame, Vector3)
+	local xSize = geometryHelper.getSizeInAxis(Vector3.xAxis, boxCFrame, boxSize)
+	local ySize = geometryHelper.getSizeInAxis(Vector3.yAxis, boxCFrame, boxSize)
+	local zSize = geometryHelper.getSizeInAxis(Vector3.zAxis, boxCFrame, boxSize)
+	return CFrame.new(boxCFrame.Position), Vector3.new(xSize, ySize, zSize)
+end
+
 function containerHelper.makeContainer(model: Model)
 	local boundingBoxPart = Instance.new("Part")
 	if model.Name == "Model" then
@@ -28,7 +37,7 @@ function containerHelper.makeContainer(model: Model)
 	boundingBoxPart.Anchored = true
 	boundingBoxPart.CanCollide = false
 
-	local boundingBoxCFrame, boundingBoxSize = model:GetBoundingBox()
+	local boundingBoxCFrame, boundingBoxSize = neutralizeBoundingBoxRotation(model:GetBoundingBox())
 	boundingBoxPart.Size = boundingBoxSize
 	boundingBoxPart.CFrame = boundingBoxCFrame
 	boundingBoxPart.Transparency = 1
