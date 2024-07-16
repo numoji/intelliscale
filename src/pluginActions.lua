@@ -2,6 +2,7 @@
 local Selection = game:GetService("Selection")
 
 local Janitor = require(script.Parent.Parent.Packages.Janitor)
+local repeating = require(script.Parent.repeating)
 local selectionHelper = require(script.Parent.utility.selectionHelper)
 
 local pluginActions = {}
@@ -10,6 +11,7 @@ local janitor = Janitor.new()
 
 local toggleFauxSelection
 local selectContainerAction
+local destroyUnparentedPartsAction
 
 function pluginActions.initialize(plugin: Plugin)
 	if not toggleFauxSelection then
@@ -22,6 +24,14 @@ function pluginActions.initialize(plugin: Plugin)
 			"intelliscaleSelectContainer",
 			"Intelliscale: Select Contatiner",
 			"Selects intelliscale container selected part is in"
+		)
+	end
+
+	if not destroyUnparentedPartsAction then
+		destroyUnparentedPartsAction = plugin:CreatePluginAction(
+			"intelliscaleDestroyUnparentedParts",
+			"Intelliscale: Destroy unparented",
+			"Destroys repeated parts & instances that were unparented but still have references saved in ChangeHistory preventing garbage collection"
 		)
 	end
 
@@ -41,6 +51,8 @@ function pluginActions.initialize(plugin: Plugin)
 
 		Selection:Set(containerSelection)
 	end))
+
+	janitor:Add(destroyUnparentedPartsAction.Triggered:Connect(repeating.destroyUnparentedRepeatInstances))
 
 	return janitor
 end

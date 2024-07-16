@@ -14,6 +14,8 @@ local scaling = require(script.Parent.scaling)
 local selectionHelper = require(script.Parent.utility.selectionHelper)
 local types = require(script.Parent.types)
 
+local unparentedInstancesForCleanup = {}
+
 local janitor = Janitor.new()
 
 local repeating = {}
@@ -239,6 +241,7 @@ local function reconcileRepeats(
 	if shouldRecreate then
 		for _, repeatInstance in repeatsFolder:GetChildren() do
 			repeatInstance.Parent = nil
+			table.insert(unparentedInstancesForCleanup, repeatInstance)
 		end
 	end
 
@@ -261,6 +264,7 @@ local function reconcileRepeats(
 		(flatSource :: BasePart).CollisionGroup = "IntelliscaleUnselectable"
 		if flatRepeats then
 			flatRepeats.Parent = nil
+			table.insert(unparentedInstancesForCleanup, flatRepeats)
 		end
 	end
 
@@ -290,7 +294,8 @@ local function reconcileRepeats(
 						local repeatName = string.format("%d_%d_%d", x, y, z)
 						local repeatInstance = repeatsFolder:FindFirstChild(repeatName)
 						if repeatInstance then
-							repeatInstance.Parent = nil -- Dont destroy cause le undo history :D
+							repeatInstance.Parent = nil
+							table.insert(unparentedInstancesForCleanup, repeatInstance)
 						end
 					end
 				end
@@ -462,6 +467,7 @@ function repeating.updateRepeat(sourcePart: BasePart, repeatUpdateSet: { [BasePa
 		repeatsFolder = sourcePart:FindFirstChild("__repeats_intelliscale_internal") :: Folder
 		if repeatsFolder then
 			repeatsFolder.Parent = nil
+			table.insert(unparentedInstancesForCleanup, repeatsFolder)
 		end
 	else
 		attributeHelper.setAttribute(repeatsFolder, "displaySize", newDisplaySize)
@@ -506,6 +512,13 @@ end
 
 function repeating.getFolder(part: BasePart)
 	return part:FindFirstChild("__repeats_intelliscale_internal") :: Folder
+end
+
+function repeating.destroyUnparentedRepeatInstances()
+	for _, instance in ipairs(unparentedInstancesForCleanup) do
+		instance:Destroy()
+	end
+	unparentedInstancesForCleanup = {}
 end
 
 function repeating.initialize()
