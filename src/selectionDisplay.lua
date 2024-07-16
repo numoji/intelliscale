@@ -1,5 +1,6 @@
 --!strict
 local CoreGui = game:GetService("CoreGui")
+local RunService = game:GetService("RunService")
 local selectionDisplay = {}
 
 local Janitor = require(script.Parent.Parent.Packages.Janitor)
@@ -133,6 +134,12 @@ local function updateCylindersByAxis(
 
 	local axisEnum = geometryHelper.axisEnumByString[axis]
 
+	if constraintType == "Scale" then
+		cylinderA:SetAttribute("scaleHeight", true)
+	else
+		cylinderA:SetAttribute("scaleHeight", false)
+	end
+
 	if constraintType == "MinMax" then
 		cylinderA.Adornee = selected
 		cylinderB.Adornee = selected
@@ -167,7 +174,8 @@ function selectionDisplay.initialize()
 				if not adornmentJanitors[part] then
 					local fauxSelectionJanitor = Janitor.new()
 					adornmentJanitors[part] = fauxSelectionJanitor
-					local fauxSelectionBox = fauxSelectionJanitor:Add(createSelectionBox(Color3.fromHex("#6fff4f"), screenGui))
+					local fauxSelectionBox =
+						fauxSelectionJanitor:Add(createSelectionBox(Color3.fromHex("#6fff4f"), screenGui), "Destroy", "box2")
 					fauxSelectionBox.Adornee = part
 				end
 			end
@@ -180,7 +188,8 @@ function selectionDisplay.initialize()
 
 					if not containerSelectedSet[realPart.Parent] then
 						containerSelectedSet[realPart.Parent] = true
-						local containerSelectionBox = constraintJanitor:Add(createSelectionBox(Color3.fromHex("#f34bff"), screenGui))
+						local containerSelectionBox =
+							constraintJanitor:Add(createSelectionBox(Color3.fromHex("#f34bff"), screenGui), "Destroy", "box1")
 						containerSelectionBox.Adornee = realPart.Parent
 					end
 
@@ -198,9 +207,9 @@ function selectionDisplay.initialize()
 			end
 		end
 
-		for selectedPart, janitor in pairs(adornmentJanitors) do
+		for selectedPart, janitor in adornmentJanitors do
 			if not newSelectedSet[selectedPart] then
-				janitor:Destroy()
+				(janitor :: any):Destroy()
 				adornmentJanitors[selectedPart] = nil
 			end
 		end
@@ -214,19 +223,13 @@ function selectionDisplay.initialize()
 			end
 			local xA = adornmentJanitor:Get("xA") :: CylinderHandleAdornment
 			local xB = adornmentJanitor:Get("xB") :: CylinderHandleAdornment
-			if xA and xB then
-				updateCylindersByAxis("x", selectedPart, xA, xB)
-			end
 			local yA = adornmentJanitor:Get("yA") :: CylinderHandleAdornment
 			local yB = adornmentJanitor:Get("yB") :: CylinderHandleAdornment
-			if yA and yB then
-				updateCylindersByAxis("y", selectedPart, yA, yB)
-			end
 			local zA = adornmentJanitor:Get("zA") :: CylinderHandleAdornment
 			local zB = adornmentJanitor:Get("zB") :: CylinderHandleAdornment
-			if zA and zB then
-				updateCylindersByAxis("z", selectedPart, zA, zB)
-			end
+			updateCylindersByAxis("z", selectedPart, zA, zB)
+			updateCylindersByAxis("x", selectedPart, xA, xB)
+			updateCylindersByAxis("y", selectedPart, yA, yB)
 		end
 	end
 
@@ -241,11 +244,45 @@ function selectionDisplay.initialize()
 	)
 
 	janitor:Add(function()
-		for selectedPart, adornmentJanitor in pairs(adornmentJanitors) do
-			adornmentJanitor:Destroy()
+		for selectedPart, adornmentJanitor in adornmentJanitors do
+			(adornmentJanitor :: any):Destroy()
 			adornmentJanitors[selectedPart] = nil
 		end
 	end)
+
+	janitor:Add(RunService.Heartbeat:Connect(function()
+		for _, adornmentJanitor_ in adornmentJanitors do
+			local adornmentJanitor = adornmentJanitor_ :: any
+			local xA = adornmentJanitor:Get("xA") :: CylinderHandleAdornment
+			local xB = adornmentJanitor:Get("xB") :: CylinderHandleAdornment
+			local yA = adornmentJanitor:Get("yA") :: CylinderHandleAdornment
+			local yB = adornmentJanitor:Get("yB") :: CylinderHandleAdornment
+			local zA = adornmentJanitor:Get("zA") :: CylinderHandleAdornment
+			local zB = adornmentJanitor:Get("zB") :: CylinderHandleAdornment
+
+			local adornee = xA.Adornee :: BasePart
+
+			local cameraCFrame = workspace.CurrentCamera.CFrame
+
+			local distance = math.max(0, (adornee.Position - cameraCFrame.Position):Dot(cameraCFrame.LookVector))
+
+			xA.Radius = distance * 0.0075
+			xB.Radius = distance * 0.0075
+			yA.Radius = distance * 0.0075
+			yB.Radius = distance * 0.0075
+			zA.Radius = distance * 0.0075
+			zB.Radius = distance * 0.0075
+
+			if xA:GetAttribute("scaleHeight") then
+				xA.Height = distance * 0.07
+				xB.Height = distance * 0.07
+				yA.Height = distance * 0.07
+				yB.Height = distance * 0.07
+				zA.Height = distance * 0.07
+				zB.Height = distance * 0.07
+			end
+		end
+	end))
 
 	return janitor
 end

@@ -33,6 +33,13 @@ function geometryHelper.getAxisFromNormalId(normalId: Enum.NormalId, cf: CFrame)
 	end
 end
 
+function geometryHelper.getSizeInAxis(axis: Vector3, cf: CFrame, size: Vector3): (number, number)
+	local rotatedAxis = cf:VectorToObjectSpace(axis)
+	local sizeInAxis = size:Dot(rotatedAxis)
+	local absSizeInAxis = math.abs(sizeInAxis)
+	return absSizeInAxis, math.sign(sizeInAxis)
+end
+
 function geometryHelper.getPositionAndSizeInParentAxis(axis: Vector3, part: BasePart)
 	local parent = part.Parent :: BasePart
 	local relativeCFrame = parent.CFrame:ToObjectSpace(part.CFrame)
