@@ -454,6 +454,8 @@ function selectionHelper.updateSelection()
 	elseif #selection > 1 then
 		callSingleInvalid()
 		callInArray(any.valid, selection, fauxSelection)
+		bindCallbacksToInstancesChanged(selection, fauxSelection, alwaysValid, any.changed, "Changed")
+		bindCallbacksToInstancesChanged(selection, fauxSelection, alwaysValid, any.attChanged, "AttributeChanged")
 
 		local isValidContainedSelection = true
 		local isValidContainerSelection = true
