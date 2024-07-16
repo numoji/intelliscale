@@ -42,7 +42,7 @@ local function CombineSettingsRecursive(settingsToCombine: { { [string]: any } }
 	local combinedSettings: { [string]: any } = {}
 	local displayOverrides: { [string]: any }
 
-	for setting, value in pairs(settingsToCombine[1]) do
+	for setting, value in settingsToCombine[1] do
 		if type(value) ~= "table" or #settingsToCombine < 2 then
 			combinedSettings[setting] = value
 			continue
@@ -75,7 +75,7 @@ local function CombineSettingsRecursive(settingsToCombine: { { [string]: any } }
 			continue
 		end
 
-		for setting, value in pairs(settings) do
+		for setting, value in settings do
 			if combinedSettings[setting] == nil then
 				combinedSettings[setting] = value
 			elseif combinedSettings[setting] ~= setting then

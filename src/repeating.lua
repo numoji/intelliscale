@@ -208,7 +208,7 @@ local function flattenInstanceHierarchyRecursive<InstanceType>(instance: Instanc
 end
 
 local function clearAttributes(instance: Instance)
-	for attribute, _ in pairs(instance:GetAttributes()) do
+	for attribute, _ in instance:GetAttributes() do
 		instance:SetAttribute(attribute, nil)
 	end
 end

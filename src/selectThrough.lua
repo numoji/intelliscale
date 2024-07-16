@@ -47,7 +47,7 @@ function selectThrough.initialize()
 	janitor:Add(selectionHelper.addSelectionChangeCallback(selectionHelper.callbackDicts.any, function(selection: { Instance })
 		local newSet: SelectThroughSet = {}
 
-		for _, instance in ipairs(selection) do
+		for _, instance in selection do
 			if instance:IsA("BasePart") then
 				addToSetRecursive(instance, newSet)
 			end

@@ -34,7 +34,7 @@ local function cacheSelectionInitialProps(selection: { Instance })
 	}
 	rotationCatching = {}
 
-	for _, instance in pairs(selection) do
+	for _, instance in selection do
 		local realInstance = selectionHelper.getRealInstance(instance)
 
 		if containerHelper.isValidContainedOrContainer(realInstance) and realInstance:IsA("BasePart") and instance:IsA("BasePart") then
