@@ -3,7 +3,6 @@ local changeDeduplicator = require(script.Parent.utility.changeDeduplicator)
 local constraintSettings = require(script.Parent.utility.settingsHelper.constraintSettings)
 local containerHelper = require(script.Parent.utility.containerHelper)
 local geometryHelper = require(script.Parent.utility.geometryHelper)
-local inspectPrint = require(script.Parent.utility.inspectPrint)
 local mathUtil = require(script.Parent.utility.mathUtil)
 local realTransform = require(script.Parent.utility.realTransform)
 local repeatSettings = require(script.Parent.utility.settingsHelper.repeatSettings)
@@ -62,10 +61,10 @@ local scaleFunctionsMap: ScaleFunctionsMap = {
 	Scale = function(axisEnum, partToScale, newParentSize: Vector3)
 		local axis = geometryHelper.axisByEnum[axisEnum]
 
-		local positionInAxis, sizeInAxis, relativeAxis = geometryHelper.getPositionAndSizeInParentAxis(axis, partToScale)
+		local positionInAxis, sizeInAxis, relativeAxis, sign = geometryHelper.getPositionAndSizeInParentAxis(axis, partToScale)
 
 		local parent = partToScale.Parent :: BasePart
-		local parentSizeScalar = newParentSize:Dot(axis) / parent.Size:Dot(axis)
+		local parentSizeScalar = math.abs(newParentSize:Dot(axis)) / math.abs(parent.Size:Dot(axis))
 
 		local newSize = sizeInAxis * parentSizeScalar
 		local newPosition = positionInAxis * parentSizeScalar
@@ -73,7 +72,7 @@ local scaleFunctionsMap: ScaleFunctionsMap = {
 		local deltaMovement = newPosition - positionInAxis
 		local deltaSize = newSize - sizeInAxis
 
-		return CFrame.new(deltaMovement * axis), deltaSize * relativeAxis
+		return CFrame.new(deltaMovement * axis), deltaSize * relativeAxis * sign
 	end,
 }
 
@@ -155,17 +154,6 @@ function scaling.cframeRecursive(
 			local newModelCFrame = newCFrame * currentCFrame:ToObjectSpace(child.WorldPivot)
 			child:PivotTo(newModelCFrame)
 		elseif child:IsA("Folder") and shouldMoveRepeats then
-			if part.Name == "zPart" and deltaCFrame and not mathUtil.fuzzyEq(deltaCFrame.Position.Z, 0) then
-				inspectPrint("zpart repeats position set", 2)
-				print(
-					part,
-					"moving repeats :: ",
-					"should write att",
-					shouldSetAttributeOnly,
-					"| delta cf",
-					deltaCFrame and deltaCFrame.Position
-				)
-			end
 			for _, folderChild in child:GetChildren() do
 				if folderChild:IsA("BasePart") then
 					scaling.cframeRecursive(folderChild, nil, false, true, newCFrame, currentCFrame)
